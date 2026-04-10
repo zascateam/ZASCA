@@ -62,12 +62,12 @@ def favicon_view(request):
     return serve(request, os.path.basename(favicon_path), document_root=os.path.dirname(favicon_path))
 
 
-def favicon_png_view(request):
+def favicon_svg_view(request):
     """
-    提供 favicon.png 文件
+    提供 favicon.svg 文件
     """
-    favicon_path = os.path.join(settings.STATIC_ROOT or settings.STATICFILES_DIRS[0], 'img', 'favicon.png')
+    favicon_path = os.path.join(settings.STATIC_ROOT or settings.STATICFILES_DIRS[0], 'img', 'favicon.svg')
     if not os.path.exists(favicon_path):
-        favicon_path = os.path.join(settings.STATICFILES_DIRS[0], 'img', 'favicon.png')
+        favicon_path = os.path.join(settings.STATICFILES_DIRS[0], 'img', 'favicon.svg')
     
     return serve(request, os.path.basename(favicon_path), document_root=os.path.dirname(favicon_path))

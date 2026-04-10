@@ -404,7 +404,7 @@ class LocalWinServerClient:
         try:
             script = f'''
             secedit /export /cfg "$env:TEMP\\secpol.cfg" | Out-Null
-            Get-Content "$env:TEMP\\secpol.cfg" | Where-Object {{ $_ -match '^(MinimumPasswordLength|PasswordComplexity|PasswordHistorySize|MaximumPasswordAge|MinimumPasswordAge)\s*=' }}
+            Get-Content "$env:TEMP\\secpol.cfg" | Where-Object {{ $_ -match '^(MinimumPasswordLength|PasswordComplexity|PasswordHistorySize|MaximumPasswordAge|MinimumPasswordAge)\\s*=' }}
             Remove-Item "$env:TEMP\\secpol.cfg" -ErrorAction SilentlyContinue
             '''
             result = self.execute_powershell(script)

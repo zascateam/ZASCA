@@ -9,12 +9,9 @@ from django.views.generic import CreateView, UpdateView, TemplateView
 from django.urls import reverse_lazy
 from django.utils.decorators import method_decorator
 from django.views.decorators.http import require_http_methods
-from django.http import JsonResponse, HttpResponse
+from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
-from django.utils.decorators import method_decorator
-from django.conf import settings
 from django.core.cache import cache
-import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
@@ -27,6 +24,18 @@ from .forms import UserRegistrationForm, UserUpdateForm, UserLoginForm
 from . import geetest_utils
 from . import captcha_utils
 from . import rate_limit
+from apps.themes.models import ThemeConfig, PageContent
+
+
+def get_theme_context():
+    """获取主题上下文，避免重复代码"""
+    theme_config = ThemeConfig.get_config()
+    return {
+        'theme_config': theme_config,
+        'theme_css_url': f'css/themes/{theme_config.active_theme}.css',
+        'custom_css_vars': theme_config.generate_css_variables(),
+        'page_contents': PageContent.get_all_enabled(),
+    }
 
 
 @method_decorator(rate_limit.register_rate_limit, name='dispatch')
@@ -45,12 +54,17 @@ class RegisterView(CreateView):
         # 使用与后端验证相同的逻辑来确定captcha_id
         captcha_id, _ = geetest_utils._get_runtime_keys()
         context['GEETEST_ID'] = captcha_id
-        context['CAPTCHA_PROVIDER'] = sc.get_captcha_config(scene='register')[0]  # 获取注册场景的配置
+        # 获取注册场景的配置
+        captcha_provider, captcha_key = sc.get_captcha_config(scene='register')
+        context['CAPTCHA_PROVIDER'] = captcha_provider
         # 仅在turnstile模式下提供turnstile的site key
-        if sc.get_captcha_config(scene='register')[0] == 'turnstile':
-            context['TURNSTILE_SITE_KEY'] = sc.get_captcha_config(scene='register')[1]  # 使用统一的captcha_id字段
+        if captcha_provider == 'turnstile':
+            context['TURNSTILE_SITE_KEY'] = captcha_key
         else:
             context['TURNSTILE_SITE_KEY'] = None
+        
+        context.update(get_theme_context())
+        
         return context
 
     def form_valid(self, form):
@@ -64,32 +78,22 @@ class RegisterView(CreateView):
             form.add_error(None, '邮箱验证码缺失')
             return self.form_invalid(form)
 
+        import hmac
         cache_key = f'register_email_code:{email}'
         expected = cache.get(cache_key)
-        if not expected or expected != email_code:
+        if not hmac.compare_digest(str(expected or ''), str(email_code or '')):
             form.add_error(None, '邮箱验证码错误或已过期')
             return self.form_invalid(form)
 
         # Optionally clear the code to prevent reuse
         cache.delete(cache_key)
 
-        # 额外验证：如果使用本地验证码，需要验证验证码
-        from apps.dashboard.models import SystemConfig
-        provider, _, _ = SystemConfig.get_config().get_captcha_config(scene='register')  # 获取注册场景的配置
-        if provider == 'local':
-            # 本地验证码验证
-            lot_number = request.POST.get('lot_number')  # 这里用作captcha_id
-            captcha_input = request.POST.get('captcha_output')  # 这里用作用户输入
-            
-            if not (lot_number and captcha_input):
-                form.add_error(None, '请完成验证码验证')
-                return self.form_invalid(form)
-            
-            # 验证本地验证码
-            from . import captcha_utils
-            if not captcha_utils.verify_captcha(lot_number, captcha_input):
-                form.add_error(None, '本地验证码校验失败')
-                return self.form_invalid(form)
+        from .captcha_service import validate_captcha
+        is_valid, error_msg = validate_captcha(self.request, scene='register')
+
+        if not is_valid:
+            form.add_error(None, error_msg)
+            return self.form_invalid(form)
 
         response = super().form_valid(form)
         messages.success(
@@ -132,6 +136,8 @@ class LoginView(TemplateView):
         # 传递DEMO模式标志到模板
         context['is_demo_mode'] = getattr(self.request, 'is_demo_mode', False)
         
+        context.update(get_theme_context())
+        
         return context
 
     def post(self, request, *args, **kwargs):
@@ -139,71 +145,14 @@ class LoginView(TemplateView):
         form = UserLoginForm(request.POST)
 
         if form.is_valid():
-            # 根据系统配置决定是否需要行为验证码
-            from apps.dashboard.models import SystemConfig
-            provider, _, _ = SystemConfig.get_config().get_captcha_config(scene='login')  # 获取登录场景的配置
-            if provider == 'geetest':
-                # 在认证之前做 Geetest v4 二次校验
-                lot_number = request.POST.get('lot_number')
-                captcha_output = request.POST.get('captcha_output')
-                pass_token = request.POST.get('pass_token')
-                gen_time = request.POST.get('gen_time')
-                captcha_id = request.POST.get('captcha_id')
+            from .captcha_service import validate_captcha
+            is_valid, error_msg = validate_captcha(request, scene='login')
 
-                if not (lot_number and captcha_output and pass_token and gen_time):
-                    form.add_error(None, '请完成验证码验证')
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return self.render_to_response(context)
-
-                ok, resp = geetest_utils.verify_geetest_v4(lot_number, captcha_output, pass_token, gen_time, captcha_id=captcha_id)
-                if not ok:
-                    form.add_error(None, '验证码校验失败')
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return self.render_to_response(context)
-            elif provider == 'turnstile':
-                # Turnstile token param is usually 'cf-turnstile-response'
-                tf_token = request.POST.get('cf-turnstile-response') or request.POST.get('turnstile_token')
-                if not tf_token:
-                    form.add_error(None, '请完成 Turnstile 验证')
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return self.render_to_response(context)
-                ok, resp = geetest_utils.verify_turnstile(tf_token, remoteip=request.META.get('REMOTE_ADDR'))
-                if not ok:
-                    form.add_error(None, 'Turnstile 验证失败')
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return self.render_to_response(context)
-            elif provider == 'local':
-                # 本地验证码验证
-                lot_number = request.POST.get('lot_number')  # 这里用作captcha_id
-                captcha_input = request.POST.get('captcha_output')  # 这里用作用户输入
-                
-                import logging
-                logger = logging.getLogger(__name__)
-                logger.info(f"Local captcha validation in login: lot_number={lot_number}, captcha_input={captcha_input}")
-                
-                if not (lot_number and captcha_input):
-                    logger.warning(f"Missing captcha data in login: lot_number={lot_number}, captcha_input={captcha_input}")
-                    form.add_error(None, '请完成验证码验证')
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return self.render_to_response(context)
-                
-                # 验证本地验证码，这里使用consume=True，因为这是最终验证
-                from . import captcha_utils
-                is_valid = captcha_utils.verify_captcha(lot_number, captcha_input, consume=True, check_attempts=True)
-                
-                logger.info(f"Final captcha validation result in login: {is_valid}")
-                
-                if not is_valid:
-                    logger.warning(f"Local captcha validation failed in login: {lot_number}")
-                    form.add_error(None, '本地验证码校验失败')
-                    context = self.get_context_data(**kwargs)
-                    context['form'] = form
-                    return self.render_to_response(context)
+            if not is_valid:
+                form.add_error(None, error_msg)
+                context = self.get_context_data(**kwargs)
+                context['form'] = form
+                return self.render_to_response(context)
 
             username = form.cleaned_data['username']
             password = form.cleaned_data['password']
@@ -241,13 +190,8 @@ class LoginView(TemplateView):
         return self.render_to_response(context)
 
     def get_client_ip(self, request):
-        """获取客户端IP地址"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            ip = x_forwarded_for.split(',')[0]
-        else:
-            ip = request.META.get('REMOTE_ADDR')
-        return ip
+        from utils.helpers import get_client_ip as _get_client_ip
+        return _get_client_ip(request)
 
 
 @method_decorator(login_required, name='dispatch')
@@ -297,7 +241,8 @@ class ProfileView(UpdateView):
             if hasattr(request, 'is_demo_mode') and request.is_demo_mode:
                 from django.contrib import messages
                 messages.error(request, 'DEMO模式下不允许修改密码')
-                return super().get(request, *args, **kwargs)  # 返回GET请求以显示表单和错误消息
+                # 返回GET请求以显示表单和错误消息
+                return super().get(request, *args, **kwargs)
             
             # 验证密码字段
             if not current_password:
@@ -305,18 +250,30 @@ class ProfileView(UpdateView):
             if not new_password:
                 return JsonResponse({'status': 'error', 'message': '请输入新密码'})
             if new_password != confirm_password:
-                return JsonResponse({'status': 'error', 'message': '两次输入的新密码不一致'})
+                return JsonResponse(
+                    {'status': 'error', 'message': '两次输入的新密码不一致'}
+                )
             
             # 验证当前密码是否正确
             user = request.user
             if not user.check_password(current_password):
                 return JsonResponse({'status': 'error', 'message': '当前密码错误'})
             
-            # 设置新密码
+            from django.contrib.auth.password_validation import validate_password
+            from django.core.exceptions import ValidationError as ValError
+            try:
+                validate_password(new_password, user=user)
+            except ValError as e:
+                return JsonResponse(
+                    {'status': 'error', 'message': e.messages[0]}
+                )
+
             user.set_password(new_password)
             user.save()
             
-            return JsonResponse({'status': 'success', 'message': '密码修改成功，请重新登录'})
+            return JsonResponse(
+                {'status': 'success', 'message': '密码修改成功，请重新登录'}
+            )
         
         # 否则是资料更新请求
         return super().post(request, *args, **kwargs)
@@ -342,8 +299,11 @@ def geetest_register(request):
 @csrf_protect
 @rate_limit.general_api_rate_limit
 def geetest_validate(request):
-    """可以做一次性的验证接口（可选）。前端可直接把三个字段POST到此处获取验证结果"""
-    # 支持 v4 参数（lot_number / captcha_output / pass_token / gen_time / captcha_id）
+    """可以做一次性的验证接口（可选）。
+    前端可直接把三个字段POST到此处获取验证结果
+    """
+    # 支持 v4 参数
+    # (lot_number / captcha_output / pass_token / gen_time / captcha_id)
     lot_number = request.POST.get('lot_number')
     captcha_output = request.POST.get('captcha_output')
     pass_token = request.POST.get('pass_token')
@@ -351,7 +311,10 @@ def geetest_validate(request):
     captcha_id = request.POST.get('captcha_id')
 
     if lot_number and captcha_output and pass_token and gen_time:
-        ok, resp = geetest_utils.verify_geetest_v4(lot_number, captcha_output, pass_token, gen_time, captcha_id=captcha_id)
+        ok, resp = geetest_utils.verify_geetest_v4(
+            lot_number, captcha_output, pass_token, gen_time,
+            captcha_id=captcha_id
+        )
         if ok:
             return JsonResponse({'result': 'ok', 'detail': resp})
         else:
@@ -384,65 +347,90 @@ def password_change_api(request):
     if not user.check_password(current_password):
         return JsonResponse({'status': 'error', 'message': '当前密码错误'})
     
-    # 设置新密码
+    from django.contrib.auth.password_validation import validate_password
+    from django.core.exceptions import ValidationError as ValError
+    try:
+        validate_password(new_password, user=user)
+    except ValError as e:
+        return JsonResponse({'status': 'error', 'message': e.messages[0]})
+
     user.set_password(new_password)
     user.save()
     
     return JsonResponse({'status': 'success', 'message': '密码修改成功，请重新登录'})
 
 
+import secrets as _secrets
+
+
 def _gen_code(length=6):
-    return ''.join([str(random.randint(0, 9)) for _ in range(length)])
+    return ''.join([_secrets.choice('0123456789') for _ in range(length)])
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
+@csrf_protect
 @rate_limit.email_code_rate_limit
 def send_register_email_code(request):
     """Send a one-time code to the supplied email for registration.
 
-    Requires behavior captcha validation to have been passed in this session if captcha_provider == 'geetest' or 'turnstile'
-    (adapter should call /accounts/geetest/validate/ first and backend can check session or just trust front-end - here we trust front-end token by requiring v4 params in this request).
+    Requires behavior captcha validation to have been passed in this session
+    if captcha_provider == 'geetest' or 'turnstile'
+    (adapter should call /accounts/geetest/validate/ first and backend can
+    check session or just trust front-end - here we trust front-end token
+    by requiring v4 params in this request).
     """
     # 检查是否启用了注册功能
     from apps.dashboard.models import SystemConfig
     cfg = SystemConfig.get_config()
     if not cfg.enable_registration:
-        return JsonResponse({'status': 'error', 'message': '注册功能已被管理员禁用'}, status=400)
+        return JsonResponse(
+            {'status': 'error', 'message': '注册功能已被管理员禁用'},
+            status=400
+        )
 
     email = request.POST.get('email')
-    # v4 captcha params optional but recommended to prevent abuse
-    lot_number = request.POST.get('lot_number')
-    captcha_output = request.POST.get('captcha_output')
-    pass_token = request.POST.get('pass_token')
-    gen_time = request.POST.get('gen_time')
-    captcha_id = request.POST.get('captcha_id')
 
     # Validate email
     if not email:
-        return JsonResponse({'status': 'error', 'message': '缺少email'}, status=400)
+        return JsonResponse(
+            {'status': 'error', 'message': '缺少email'},
+            status=400
+        )
     
     # 验证邮箱后缀
     from apps.dashboard.models import SystemConfig
+    from django.core.cache import cache
+
     config = SystemConfig.get_config()
-    
-    # 邮箱后缀验证逻辑
+
     email_suffix = '@' + email.split('@')[1] if '@' in email else ''
-    
+
+    cache_key = f'email_suffixes:{config.pk}:{config.email_suffix_mode}'
+    suffix_list = cache.get(cache_key)
+    if suffix_list is None:
+        suffix_list = []
+        if config.email_suffix_list:
+            suffix_list = [
+                suffix.strip()
+                for suffix in config.email_suffix_list.strip().split('\n')
+                if suffix.strip()
+            ]
+        cache.set(cache_key, suffix_list, timeout=300)
+
     if config.email_suffix_mode == 'whitelist':
-        # 白名单模式：只有在列表中的后缀才允许
-        allowed_suffixes = []
-        if config.email_suffix_list:
-            allowed_suffixes = [suffix.strip() for suffix in config.email_suffix_list.strip().split('\n') if suffix.strip()]
-        if email_suffix not in allowed_suffixes:
-            return JsonResponse({'status': 'error', 'message': f'邮箱后缀 {email_suffix} 不在允许的列表中'}, status=400)
+        if email_suffix not in suffix_list:
+            return JsonResponse(
+                {'status': 'error',
+                 'message': f'邮箱后缀 {email_suffix} 不在允许的列表中'},
+                status=400
+            )
     elif config.email_suffix_mode == 'blacklist':
-        # 黑名单模式：在列表中的后缀不允许
-        blocked_suffixes = []
-        if config.email_suffix_list:
-            blocked_suffixes = [suffix.strip() for suffix in config.email_suffix_list.strip().split('\n') if suffix.strip()]
-        if email_suffix in blocked_suffixes:
-            return JsonResponse({'status': 'error', 'message': f'邮箱后缀 {email_suffix} 已被禁止使用'}, status=400)
+        if email_suffix in suffix_list:
+            return JsonResponse(
+                {'status': 'error',
+                 'message': f'邮箱后缀 {email_suffix} 已被禁止使用'},
+                status=400
+            )
     
     # 验证邮箱格式
     from django.core.validators import validate_email
@@ -450,37 +438,19 @@ def send_register_email_code(request):
     try:
         validate_email(email)
     except ValidationError:
-        return JsonResponse({'status': 'error', 'message': '请输入有效的邮箱地址'}, status=400)
+        return JsonResponse(
+            {'status': 'error', 'message': '请输入有效的邮箱地址'},
+            status=400
+        )
 
-    # Check system config: if provider is geetest, require v4 params and validate them
-    provider, _, _ = cfg.get_captcha_config(scene='email')  # 获取邮箱场景的配置
+    from .captcha_service import validate_captcha
+    is_valid, error_msg = validate_captcha(request, scene='email')
 
-    if provider == 'geetest':
-        if not (lot_number and captcha_output and pass_token and gen_time):
-            return JsonResponse({'status': 'error', 'message': '请先完成行为验证'}, status=400)
-        ok, resp = geetest_utils.verify_geetest_v4(lot_number, captcha_output, pass_token, gen_time, captcha_id=captcha_id)
-        if not ok:
-            return JsonResponse({'status': 'error', 'message': '行为验证失败'}, status=400)
-    elif provider == 'turnstile':
-        # Turnstile token param is usually 'cf-turnstile-response'
-        tf_token = request.POST.get('cf-turnstile-response') or request.POST.get('turnstile_token')
-        if not tf_token:
-            return JsonResponse({'status': 'error', 'message': '请先完成Turnstile验证'}, status=400)
-        ok, resp = geetest_utils.verify_turnstile(tf_token, remoteip=request.META.get('REMOTE_ADDR'))
-        if not ok:
-            return JsonResponse({'status': 'error', 'message': 'Turnstile 验证失败'}, status=400)
-    elif provider == 'local':
-        # 本地验证码验证
-        lot_number = request.POST.get('lot_number')  # 这里用作captcha_id
-        captcha_input = request.POST.get('captcha_output')  # 这里用作用户输入
-        
-        if not (lot_number and captcha_input):
-            return JsonResponse({'status': 'error', 'message': '请先完成本地验证码验证'}, status=400)
-        
-        # 验证本地验证码，这里使用consume=True，因为这是最终验证
-        from . import captcha_utils
-        if not captcha_utils.verify_captcha(lot_number, captcha_input, consume=True):
-            return JsonResponse({'status': 'error', 'message': '本地验证码验证失败'}, status=400)
+    if not is_valid:
+        return JsonResponse(
+            {'status': 'error', 'message': error_msg},
+            status=400
+        )
 
     # generate code and store in cache
     code = _gen_code(6)
@@ -492,8 +462,13 @@ def send_register_email_code(request):
     message_body = f'您的注册验证码是: {code}，有效期10分钟。'
     from_email = cfg.smtp_from_email
     
-    if cfg.smtp_host and cfg.smtp_port and cfg.smtp_username and cfg.smtp_password and cfg.smtp_from_email:
-        # Create HTML email template for registration (never a test email in this context)
+    smtp_ready = (
+        cfg.smtp_host and cfg.smtp_port and
+        cfg.smtp_username and cfg.smtp_password and cfg.smtp_from_email
+    )
+    if smtp_ready:
+        # Create HTML email template for registration
+        # (never a test email in this context)
         html_body = f'''
         <!DOCTYPE html>
         <html>
@@ -501,12 +476,18 @@ def send_register_email_code(request):
             <meta charset="utf-8">
             <title>{subject}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }}
-                .header {{ background-color: #f8f9fa; padding: 20px; text-align: center; border-bottom: 1px solid #dee2e6; }}
+                body {{ font-family: Arial, sans-serif; line-height: 1.6;
+                    color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto;
+                    padding: 20px; border: 1px solid #eee; }}
+                .header {{ background-color: #f8f9fa; padding: 20px;
+                    text-align: center; border-bottom: 1px solid #dee2e6; }}
                 .content {{ padding: 20px 0; }}
-                .code {{ font-size: 24px; font-weight: bold; color: #007bff; letter-spacing: 5px; text-align: center; margin: 20px 0; }}
-                .footer {{ padding: 20px 0; text-align: center; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 12px; }}
+                .code {{ font-size: 24px; font-weight: bold; color: #007bff;
+                    letter-spacing: 5px; text-align: center; margin: 20px 0; }}
+                .footer {{ padding: 20px 0; text-align: center;
+                    border-top: 1px solid #dee2e6; color: #6c757d;
+                    font-size: 12px; }}
             </style>
         </head>
         <body>
@@ -558,7 +539,10 @@ def send_register_email_code(request):
         server.sendmail(from_email, [email], text)
         server.quit()
     else:
-        return JsonResponse({'status': 'error', 'message': 'SMTP配置不完整'}, status=500)
+        return JsonResponse(
+            {'status': 'error', 'message': 'SMTP配置不完整'},
+            status=500
+        )
 
     return JsonResponse({'status': 'ok'})
 
@@ -631,7 +615,6 @@ def local_captcha_image(request, captcha_id):
     return captcha_utils.get_captcha_image(request, captcha_id)
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
 @rate_limit.general_api_rate_limit
 def local_captcha_verify(request):
@@ -641,7 +624,9 @@ def local_captcha_verify(request):
     
     # 验证时设置consume=False，这样验证后不会删除，可用于后续的表单提交验证
     # 设置较低的尝试次数限制，防止暴力破解
-    if captcha_utils.verify_captcha(captcha_id, user_input, consume=False, max_attempts=3):
+    if captcha_utils.verify_captcha(
+        captcha_id, user_input, consume=False, max_attempts=3
+    ):
         return JsonResponse({'result': 'success'})
     else:
         return JsonResponse({'result': 'failure'}, status=400)
@@ -660,12 +645,17 @@ class ForgotPasswordView(TemplateView):
         # 使用与后端验证相同的逻辑来确定captcha_id
         captcha_id, _ = geetest_utils._get_runtime_keys()
         context['GEETEST_ID'] = captcha_id
-        context['CAPTCHA_PROVIDER'] = sc.get_captcha_config(scene='email')[0]  # 获取邮箱场景的配置
+        # 获取邮箱场景的配置
+        captcha_provider, captcha_key = sc.get_captcha_config(scene='email')
+        context['CAPTCHA_PROVIDER'] = captcha_provider
         # 仅在turnstile模式下提供turnstile的site key
-        if sc.get_captcha_config(scene='email')[0] == 'turnstile':
-            context['TURNSTILE_SITE_KEY'] = sc.get_captcha_config(scene='email')[1]  # 使用统一的captcha_id字段
+        if captcha_provider == 'turnstile':
+            context['TURNSTILE_SITE_KEY'] = captcha_key
         else:
             context['TURNSTILE_SITE_KEY'] = None
+        
+        context.update(get_theme_context())
+        
         return context
 
     def post(self, request, *args, **kwargs):
@@ -684,15 +674,19 @@ class ForgotPasswordView(TemplateView):
             messages.error(request, '两次输入的密码不一致')
             return self.render_to_response(self.get_context_data())
         
-        # 验证密码强度
-        if len(new_password1) < 8:
-            messages.error(request, '密码长度至少为8位')
+        from django.contrib.auth.password_validation import validate_password
+        from django.core.exceptions import ValidationError as ValError
+        try:
+            validate_password(new_password1)
+        except ValError as e:
+            messages.error(request, e.messages[0])
             return self.render_to_response(self.get_context_data())
-        
-        # 验证邮箱验证码
+
+        from .captcha_service import validate_captcha
+        import hmac
         cache_key = f'forgot_password_email_code:{email}'
         expected = cache.get(cache_key)
-        if not expected or expected != email_code:
+        if not hmac.compare_digest(str(expected or ''), str(email_code or '')):
             messages.error(request, '邮箱验证码错误或已过期')
             return self.render_to_response(self.get_context_data())
         
@@ -703,49 +697,12 @@ class ForgotPasswordView(TemplateView):
             messages.error(request, '该邮箱对应的用户不存在')
             return self.render_to_response(self.get_context_data())
         
-        # 根据系统配置决定是否需要行为验证码
-        from apps.dashboard.models import SystemConfig
-        provider, _, _ = SystemConfig.get_config().get_captcha_config(scene='email')  # 获取邮箱场景的配置
-        if provider == 'geetest':
-            # 在认证之前做 Geetest v4 二次校验
-            lot_number = request.POST.get('lot_number')
-            captcha_output = request.POST.get('captcha_output')
-            pass_token = request.POST.get('pass_token')
-            gen_time = request.POST.get('gen_time')
-            captcha_id = request.POST.get('captcha_id')
+        from .captcha_service import validate_captcha
+        is_valid, error_msg = validate_captcha(request, scene='email')
 
-            if not (lot_number and captcha_output and pass_token and gen_time):
-                messages.error(request, '请完成验证码验证')
-                return self.render_to_response(self.get_context_data())
-
-            ok, resp = geetest_utils.verify_geetest_v4(lot_number, captcha_output, pass_token, gen_time, captcha_id=captcha_id)
-            if not ok:
-                messages.error(request, '验证码校验失败')
-                return self.render_to_response(self.get_context_data())
-        elif provider == 'turnstile':
-            # Turnstile token param is usually 'cf-turnstile-response'
-            tf_token = request.POST.get('cf-turnstile-response') or request.POST.get('turnstile_token')
-            if not tf_token:
-                messages.error(request, '请完成 Turnstile 验证')
-                return self.render_to_response(self.get_context_data())
-            ok, resp = geetest_utils.verify_turnstile(tf_token, remoteip=request.META.get('REMOTE_ADDR'))
-            if not ok:
-                messages.error(request, 'Turnstile 验证失败')
-                return self.render_to_response(self.get_context_data())
-        elif provider == 'local':
-            # 本地验证码验证
-            lot_number = request.POST.get('lot_number')  # 这里用作captcha_id
-            captcha_input = request.POST.get('captcha_output')  # 这里用作用户输入
-            
-            if not (lot_number and captcha_input):
-                messages.error(request, '请完成验证码验证')
-                return self.render_to_response(self.get_context_data())
-            
-            # 验证本地验证码
-            from . import captcha_utils
-            if not captcha_utils.verify_captcha(lot_number, captcha_input):
-                messages.error(request, '本地验证码校验失败')
-                return self.render_to_response(self.get_context_data())
+        if not is_valid:
+            messages.error(request, error_msg)
+            return self.render_to_response(self.get_context_data())
         
         # 重置用户密码
         user.set_password(new_password1)
@@ -758,69 +715,59 @@ class ForgotPasswordView(TemplateView):
         return redirect('accounts:login')
 
 
-@csrf_exempt
 @require_http_methods(['POST'])
+@csrf_protect
 @rate_limit.email_code_rate_limit
 def send_forgot_password_email_code(request):
     """Send a one-time code to the supplied email for password reset.
 
-    Requires behavior captcha validation to have been passed in this session if captcha_provider == 'geetest' or 'turnstile'
-    (adapter should call /accounts/geetest/validate/ first and backend can check session or just trust front-end - here we trust front-end token by requiring v4 params in this request).
+    Requires behavior captcha validation to have been passed in this session
+    if captcha_provider == 'geetest' or 'turnstile'
+    (adapter should call /accounts/geetest/validate/ first and backend can
+    check session or just trust front-end - here we trust front-end token
+    by requiring v4 params in this request).
     """
     email = request.POST.get('email')
-    # v4 captcha params optional but recommended to prevent abuse
-    lot_number = request.POST.get('lot_number')
-    captcha_output = request.POST.get('captcha_output')
-    pass_token = request.POST.get('pass_token')
-    gen_time = request.POST.get('gen_time')
-    captcha_id = request.POST.get('captcha_id')
 
     # Validate email
     if not email:
-        return JsonResponse({'status': 'error', 'message': '缺少email'}, status=400)
+        return JsonResponse(
+            {'status': 'error', 'message': '缺少email'},
+            status=400
+        )
 
-    # Check system config: if provider is geetest, require v4 params and validate them
     from apps.dashboard.models import SystemConfig
     cfg = SystemConfig.get_config()
-    provider, _, _ = cfg.get_captcha_config(scene='email')  # 获取邮箱场景的配置
 
-    if provider == 'geetest':
-        if not (lot_number and captcha_output and pass_token and gen_time):
-            return JsonResponse({'status': 'error', 'message': '请先完成行为验证'}, status=400)
-        ok, resp = geetest_utils.verify_geetest_v4(lot_number, captcha_output, pass_token, gen_time, captcha_id=captcha_id)
-        if not ok:
-            return JsonResponse({'status': 'error', 'message': '行为验证失败'}, status=400)
-    elif provider == 'turnstile':
-        # Turnstile token param is usually 'cf-turnstile-response'
-        tf_token = request.POST.get('cf-turnstile-response') or request.POST.get('turnstile_token')
-        if not tf_token:
-            return JsonResponse({'status': 'error', 'message': '请先完成Turnstile验证'}, status=400)
-        ok, resp = geetest_utils.verify_turnstile(tf_token, remoteip=request.META.get('REMOTE_ADDR'))
-        if not ok:
-            return JsonResponse({'status': 'error', 'message': 'Turnstile 验证失败'}, status=400)
-    elif provider == 'local':
-        # 本地验证码验证
-        lot_number = request.POST.get('lot_number')  # 这里用作captcha_id
-        captcha_input = request.POST.get('captcha_output')  # 这里用作用户输入
-        
-        if not (lot_number and captcha_input):
-            return JsonResponse({'status': 'error', 'message': '请先完成本地验证码验证'}, status=400)
-        
-        # 验证本地验证码
-        from . import captcha_utils
-        if not captcha_utils.verify_captcha(lot_number, captcha_input):
-            return JsonResponse({'status': 'error', 'message': '本地验证码验证失败'}, status=400)
+    from .captcha_service import validate_captcha
+    is_valid, error_msg = validate_captcha(request, scene='email')
 
-    # Check if user exists
-    try:
-        user = User.objects.get(email=email)
-    except User.DoesNotExist:
-        return JsonResponse({'status': 'error', 'message': '该邮箱对应的用户不存在'}, status=400)
+    if not is_valid:
+        return JsonResponse(
+            {'status': 'error', 'message': error_msg},
+            status=400
+        )
 
-    # generate code and store in cache
+    user_exists = User.objects.filter(email=email).exists()
+
+    from apps.dashboard.models import SystemConfig
+    cfg = SystemConfig.get_config()
+
+    from .captcha_service import validate_captcha
+    is_valid, error_msg = validate_captcha(request, scene='email')
+
+    if not is_valid:
+        return JsonResponse(
+            {'status': 'error', 'message': error_msg},
+            status=400
+        )
+
+    if not user_exists:
+        return JsonResponse({'status': 'ok'})
+
     code = _gen_code(6)
     cache_key = f'forgot_password_email_code:{email}'
-    cache.set(cache_key, code, timeout=10 * 60)  # 10 minutes
+    cache.set(cache_key, code, timeout=10 * 60)
 
     # send email using direct SMTP connection
     subject = 'ZASCA 重置密码验证码'
@@ -831,8 +778,13 @@ def send_forgot_password_email_code(request):
     if os.environ.get('ZASCA_DEMO', '').lower() == '1':
         # 在DEMO模式下，模拟发送邮件成功但不实际发送
         logger = __import__('logging').getLogger(__name__)
-        logger.info(f'DEMO模式: 模拟发送忘记密码验证码邮件至 {email}, 验证码: {code}')
-    elif cfg.smtp_host and cfg.smtp_port and cfg.smtp_username and cfg.smtp_password and cfg.smtp_from_email:
+        logger.info(
+            f'DEMO模式: 模拟发送忘记密码验证码邮件至 {email}'
+        )
+    elif (
+        cfg.smtp_host and cfg.smtp_port and
+        cfg.smtp_username and cfg.smtp_password and cfg.smtp_from_email
+    ):
         # Create HTML email template for password reset
         html_body = f'''
         <!DOCTYPE html>
@@ -841,12 +793,18 @@ def send_forgot_password_email_code(request):
             <meta charset="utf-8">
             <title>{subject}</title>
             <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #eee; }}
-                .header {{ background-color: #f8f9fa; padding: 20px; text-align: center; border-bottom: 1px solid #dee2e6; }}
+                body {{ font-family: Arial, sans-serif; line-height: 1.6;
+                    color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto;
+                    padding: 20px; border: 1px solid #eee; }}
+                .header {{ background-color: #f8f9fa; padding: 20px;
+                    text-align: center; border-bottom: 1px solid #dee2e6; }}
                 .content {{ padding: 20px 0; }}
-                .code {{ font-size: 24px; font-weight: bold; color: #007bff; letter-spacing: 5px; text-align: center; margin: 20px 0; }}
-                .footer {{ padding: 20px 0; text-align: center; border-top: 1px solid #dee2e6; color: #6c757d; font-size: 12px; }}
+                .code {{ font-size: 24px; font-weight: bold; color: #007bff;
+                    letter-spacing: 5px; text-align: center; margin: 20px 0; }}
+                .footer {{ padding: 20px 0; text-align: center;
+                    border-top: 1px solid #dee2e6; color: #6c757d;
+                    font-size: 12px; }}
             </style>
         </head>
         <body>
@@ -898,6 +856,9 @@ def send_forgot_password_email_code(request):
         server.sendmail(from_email, [email], text)
         server.quit()
     else:
-        return JsonResponse({'status': 'error', 'message': 'SMTP配置不完整'}, status=500)
+        return JsonResponse(
+            {'status': 'error', 'message': 'SMTP配置不完整'},
+            status=500
+        )
 
     return JsonResponse({'status': 'ok'})

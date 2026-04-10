@@ -135,18 +135,21 @@
 }
 
 .md-button--outlined:hover {
-    background-color: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+    border-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-primary);
 }
 
 .md-button--text {
     background-color: transparent;
     color: var(--md-sys-color-primary);
+    border: 1px solid var(--md-sys-color-outline);
 }
 
 .md-button--text:hover {
-    background-color: var(--md-sys-color-primary);
-    color: var(--md-sys-color-on-primary);
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+    border-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-primary);
 }
 
 /* 产品分组区域 */
@@ -313,6 +316,47 @@
     font-size: var(--md-sys-typescale-body-large-size);
     color: var(--md-sys-color-on-surface-variant);
     margin-bottom: var(--md-sys-spacing-margin-lg);
+}
+
+/* 深色模式适配 */
+[data-theme="dark"] .empty-icon {
+    color: rgba(255, 255, 255, 0.5);
+}
+
+[data-theme="dark"] .empty-title,
+[data-theme="dark"] .empty-description {
+    color: rgba(255, 255, 255, 0.7);
+}
+
+[data-theme="dark"] .md-button--filled {
+    background: linear-gradient(135deg, var(--md-sys-color-primary), var(--md-sys-color-secondary));
+    color: #ffffff;
+}
+
+[data-theme="dark"] .md-button--filled .md-button__label {
+    color: #ffffff;
+}
+
+[data-theme="dark"] .md-button--outlined {
+    border-color: var(--md-sys-color-outline);
+    color: var(--md-sys-color-primary);
+}
+
+[data-theme="dark"] .md-button--outlined:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.15);
+    border-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-primary);
+}
+
+[data-theme="dark"] .md-button--text {
+    border-color: var(--md-sys-color-outline);
+    color: var(--md-sys-color-primary);
+}
+
+[data-theme="dark"] .md-button--text:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.15);
+    border-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-primary);
 }
 
 /* 分页 */

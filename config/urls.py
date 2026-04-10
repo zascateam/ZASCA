@@ -22,7 +22,7 @@ urlpatterns = [
     # 处理404页面
     path('404/', TemplateView.as_view(template_name='errors/404.html'), name='404'),
     path('favicon.ico', views.favicon_view),
-    path('favicon.png', views.favicon_png_view),
+    path('favicon.svg', views.favicon_svg_view),
 ]
 
 # 开发环境下提供媒体文件服务

@@ -12,18 +12,24 @@ from config.demo_middleware import is_demo_mode
 class CustomUserAdmin(BaseUserAdmin):
     """自定义用户管理后台"""
 
-    list_display = ('username', 'email', 'is_staff', 'is_active', 'last_login', 'created_at')
+    list_display = ('username', 'email', 'is_staff', 'is_active',
+                    'last_login', 'created_at')
     list_filter = ('is_staff', 'is_superuser', 'is_active', 'is_verified')
     search_fields = ('username', 'email')
     ordering = ('-created_at',)
 
     fieldsets = (
         (None, {'fields': ('username', 'password')}),
-        (_('个人信息'), {'fields': ('first_name', 'last_name', 'email', 'phone', 'avatar')}),
-        (_('权限'), {
-            'fields': ('is_active', 'is_staff', 'is_superuser', 'is_verified', 'groups', 'user_permissions'),
+        (_('个人信息'), {
+            'fields': ('first_name', 'last_name', 'email', 'phone', 'avatar')
         }),
-        (_('重要日期'), {'fields': ('last_login', 'date_joined', 'created_at', 'updated_at')}),
+        (_('权限'), {
+            'fields': ('is_active', 'is_staff', 'is_superuser', 'is_verified',
+                       'groups', 'user_permissions'),
+        }),
+        (_('重要日期'), {
+            'fields': ('last_login', 'date_joined', 'created_at', 'updated_at')
+        }),
     )
 
     add_fieldsets = (
@@ -40,7 +46,6 @@ class CustomUserAdmin(BaseUserAdmin):
         if is_demo_mode():
             # 在DEMO模式下，移除密码字段的编辑功能
             # 通过修改fieldsets来移除密码编辑
-            password_fields = ('password',)
             # 获取当前fieldsets
             current_fieldsets = list(self.fieldsets)
             # 修改第一个fieldset，移除密码字段
@@ -50,11 +55,13 @@ class CustomUserAdmin(BaseUserAdmin):
                 if 'password' in fields_list:
                     fields_list = [f for f in fields_list if f != 'password']
                     if fields_list:  # 如果还有其他字段，保留fieldset
-                        modified_fieldsets.append((name, {'fields': tuple(fields_list)}))
+                        modified_fieldsets.append(
+                            (name, {'fields': tuple(fields_list)})
+                        )
                 else:
                     modified_fieldsets.append((name, fieldset_dict))
             self.fieldsets = tuple(modified_fieldsets)
-        
+
         return super().change_view(request, object_id, form_url, extra_context)
 
     def save_model(self, request, obj, form, change):
@@ -65,8 +72,11 @@ class CustomUserAdmin(BaseUserAdmin):
                 # 从数据库重新获取用户对象，保持原有的密码
                 original_obj = self.model.objects.get(pk=obj.pk)
                 obj.password = original_obj.password
-                messages.warning(request, "DEMO模式下不允许修改密码，已保持原密码不变。")
-        
+                messages.warning(
+                    request,
+                    "DEMO模式下不允许修改密码，已保持原密码不变。"
+                )
+
         super().save_model(request, obj, form, change)
 
 

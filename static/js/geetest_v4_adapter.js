@@ -351,7 +351,7 @@
                             formData.append('captcha_id', captcha_id);
 
                             xhr.open('POST', '/accounts/email/send-code/', true);
-                            xhr.setRequestHeader('X-CSRFToken', document.querySelector('[name=csrfmiddlewaretoken]').value);
+                            xhr.setRequestHeader('X-CSRFToken', window.getCsrfToken ? window.getCsrfToken() : (document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''));
                             
                             xhr.onreadystatechange = function() {
                                 if (xhr.readyState === 4) {

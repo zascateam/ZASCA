@@ -1,15 +1,71 @@
 # Winrm客户端工具
 import logging
 import re
+import os
 from dataclasses import dataclass
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from winrm import Session
 from winrm.exceptions import InvalidCredentialsError
 from django.conf import settings
 import socket
 import time
+import secrets
+import string
+import functools
 
 logger = logging.getLogger("zasca")
+
+
+USERNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_]{1,150}$')
+GROUPNAME_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\s]{1,256}$')
+MAX_STRING_LENGTH = 4096
+
+
+class CommandInjectionError(Exception):
+    pass
+
+
+def validate_username(username: str) -> str:
+    if not username:
+        raise CommandInjectionError("用户名不能为空")
+    if len(username) > 150:
+        raise CommandInjectionError("用户名长度不能超过150个字符")
+    if not USERNAME_PATTERN.match(username):
+        raise CommandInjectionError(f"用户名格式无效: 只允许字母、数字和下划线")
+    return username
+
+
+def validate_groupname(group: str) -> str:
+    if not group:
+        raise CommandInjectionError("组名不能为空")
+    if len(group) > 256:
+        raise CommandInjectionError("组名长度不能超过256个字符")
+    if not GROUPNAME_PATTERN.match(group):
+        raise CommandInjectionError(f"组名格式无效: 只允许字母、数字、下划线、连字符和空格")
+    return group
+
+
+def validate_string_length(s: str, max_length: int = MAX_STRING_LENGTH, field_name: str = "输入") -> str:
+    if s and len(s) > max_length:
+        raise CommandInjectionError(f"{field_name}长度不能超过{max_length}个字符")
+    return s
+
+
+def _escape_ps_string(s: str) -> str:
+    if not s:
+        return s
+    if len(s) > MAX_STRING_LENGTH:
+        raise CommandInjectionError(f"字符串长度超过最大限制 {MAX_STRING_LENGTH}")
+    return s.replace('\x00', '').replace('`', '``').replace('"', '`"').replace('$', '`$').replace('\n', '`n').replace('\r', '`r')
+
+
+def _escape_for_here_string(s: str) -> str:
+    if not s:
+        return s
+    s = s.replace('\x00', '')
+    if '@"' in s or '"@' in s:
+        raise CommandInjectionError("内容包含非法的 here-string 分隔符")
+    return s
 
 
 @dataclass
@@ -21,14 +77,6 @@ class WinrmResult:
     @property
     def success(self) -> bool:
         return self.status_code == 0
-
-
-def _escape_ps_string(s: str) -> str:
-    """转义PowerShell字符串中的特殊字符，防止命令注入"""
-    if not s:
-        return s
-    # 双引号内: 反引号` 双引号" 美元符$ 需要转义
-    return s.replace('`', '``').replace('"', '`"').replace('$', '`$')
 
 
 class WinrmClient:
@@ -98,6 +146,12 @@ class WinrmClient:
         self.ca_trust_path = ca_trust_path
         self.client_cert_pem = client_cert_pem
         self.client_cert_key = client_cert_key
+
+        if server_cert_validation == 'ignore':
+            logger.warning(
+                f"WinRM连接到 {hostname} 未启用服务器证书验证，"
+                "存在中间人攻击风险"
+            )
 
         # 验证证书配置
         if use_ssl and server_cert_validation == 'validate':
@@ -304,10 +358,16 @@ class WinrmClient:
             description: Optional[str] = None,
             group: Optional[str] = None
     ) -> WinrmResult:
-        """创建本地用户"""
-        # 校验用户名格式，只允许字母数字下划线
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+            validate_string_length(password, 256, "密码")
+            if description:
+                validate_string_length(description, 512, "描述")
+            if group:
+                validate_groupname(group)
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
 
         safe_user = _escape_ps_string(username)
         safe_pass = _escape_ps_string(password)
@@ -334,9 +394,16 @@ Add-LocalGroupMember -Group "Users" -Member "{safe_user}" -ErrorAction Stop
             description: Optional[str] = None,
             group: Optional[str] = None
     ) -> WinrmResult:
-        """创建用户并要求下次登录改密"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+            validate_string_length(password, 256, "密码")
+            if description:
+                validate_string_length(description, 512, "描述")
+            if group:
+                validate_groupname(group)
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
 
         safe_user = _escape_ps_string(username)
         safe_pass = _escape_ps_string(password)
@@ -358,47 +425,55 @@ Add-LocalGroupMember -Group "Users" -Member "{safe_user}" -ErrorAction Stop
         return result
 
     def delete_user(self, username: str) -> WinrmResult:
-        """删除本地用户"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
         safe_user = _escape_ps_string(username)
         script = f'Remove-LocalUser -Name "{safe_user}" -ErrorAction Stop'
         logger.info(f"删除用户: {username}")
         return self.execute_powershell(script)
 
     def enable_user(self, username: str) -> WinrmResult:
-        """启用用户"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
         safe_user = _escape_ps_string(username)
         script = f'Enable-LocalUser -Name "{safe_user}" -ErrorAction Stop'
         logger.info(f"启用用户: {username}")
         return self.execute_powershell(script)
 
     def disabled_user(self, username: str) -> WinrmResult:
-        """禁用用户"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
         safe_user = _escape_ps_string(username)
         script = f'Disable-LocalUser -Name "{safe_user}" -ErrorAction Stop'
         logger.info(f"禁用用户: {username}")
         return self.execute_powershell(script)
 
     def get_user_info(self, username: str) -> WinrmResult:
-        """获取用户信息"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
         safe_user = _escape_ps_string(username)
         script = f'Get-LocalUser -Name "{safe_user}" | ConvertTo-Json'
         return self.execute_powershell(script)
 
     def list_users(self) -> WinrmResult:
-        """列出所有本地用户"""
         return self.execute_powershell('Get-LocalUser | ConvertTo-Json')
 
     def check_user_exists(self, username: str) -> bool:
-        """检查用户是否存在"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        try:
+            validate_username(username)
+        except CommandInjectionError:
             return False
         safe_user = _escape_ps_string(username)
         try:
@@ -418,7 +493,7 @@ Add-LocalGroupMember -Group "Users" -Member "{safe_user}" -ErrorAction Stop
         try:
             script = f'''
             secedit /export /cfg "$env:TEMP\\secpol.cfg" | Out-Null
-            Get-Content "$env:TEMP\\secpol.cfg" | Where-Object {{ $_ -match '^(MinimumPasswordLength|PasswordComplexity|PasswordHistorySize|MaximumPasswordAge|MinimumPasswordAge)\s*=' }}
+            Get-Content "$env:TEMP\\secpol.cfg" | Where-Object {{ $_ -match '^(MinimumPasswordLength|PasswordComplexity|PasswordHistorySize|MaximumPasswordAge|MinimumPasswordAge)\\s*=' }}
             Remove-Item "$env:TEMP\\secpol.cfg" -ErrorAction SilentlyContinue
             '''
             result = self.execute_powershell(script)
@@ -516,31 +591,40 @@ Add-LocalGroupMember -Group "Users" -Member "{safe_user}" -ErrorAction Stop
         logger.info(f"生成强密码完成，长度: {len(password)}")
         return password
     def op_user(self, username: str) -> bool:
-        """授予管理员权限"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        try:
+            validate_username(username)
+        except CommandInjectionError:
             return False
         safe_user = _escape_ps_string(username)
         try:
-            result = self.execute_powershell(f'net localgroup Administrators "{safe_user}" /add')
+            result = self.execute_powershell(
+                f'net localgroup Administrators "{safe_user}" /add'
+            )
             return result.success
         except:
             return False
 
     def deop_user(self, username: str) -> bool:
-        """撤销管理员权限"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
+        try:
+            validate_username(username)
+        except CommandInjectionError:
             return False
         safe_user = _escape_ps_string(username)
         try:
-            result = self.execute_powershell(f'net localgroup Administrators "{safe_user}" /delete')
+            result = self.execute_powershell(
+                f'net localgroup Administrators "{safe_user}" /delete'
+            )
             return result.success
         except:
             return False
 
     def reset_password(self, username: str, password: str) -> WinrmResult:
-        """重置用户密码"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+            validate_string_length(password, 256, "密码")
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
         safe_user = _escape_ps_string(username)
         safe_pass = _escape_ps_string(password)
         script = f'''
@@ -553,9 +637,14 @@ Set-LocalUser -Name "{safe_user}" -Password $pw
         return result
 
     def add_to_remote_users(self, username: str) -> WinrmResult:
-        """添加到远程桌面用户组"""
-        if not re.match(r'^[a-zA-Z0-9_]+$', username):
-            return WinrmResult(1, '', 'Invalid username format')
+        try:
+            validate_username(username)
+        except CommandInjectionError as e:
+            logger.warning(f"输入验证失败: {str(e)}")
+            return WinrmResult(1, '', str(e))
         safe_user = _escape_ps_string(username)
-        script = f'Add-LocalGroupMember -Group "Remote Desktop Users" -Member "{safe_user}" -ErrorAction SilentlyContinue'
+        script = (
+            f'Add-LocalGroupMember -Group "Remote Desktop Users" '
+            f'-Member "{safe_user}" -ErrorAction SilentlyContinue'
+        )
         return self.execute_powershell(script)

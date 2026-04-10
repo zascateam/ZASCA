@@ -14,23 +14,20 @@ def check_production_readiness():
 
     # 1. 检查 SECRET_KEY
     if not os.environ.get('DJANGO_SECRET_KEY'):
-        if settings.PRODUCTION_MODE:
+        if not settings.DEBUG:
             errors.append("生产环境必须设置 DJANGO_SECRET_KEY 环境变量")
         else:
             warnings.append("未设置 DJANGO_SECRET_KEY，系统将生成临时密钥")
 
-    # 2. 检查 DEBUG 模式
-    if settings.DEBUG and settings.PRODUCTION_MODE:
+    if settings.DEBUG and not settings.DEBUG:
         errors.append("生产环境不得启用 DEBUG 模式")
 
-    # 3. 检查 ALLOWED_HOSTS
-    if settings.PRODUCTION_MODE:
+    if not settings.DEBUG:
         allowed_hosts = settings.ALLOWED_HOSTS
         if not allowed_hosts or allowed_hosts == ['*'] or 'localhost' in allowed_hosts:
             errors.append("生产环境必须设置有效的 ALLOWED_HOSTS，不能使用 * 或 localhost")
 
-    # 4. 检查 SSL 设置
-    if settings.PRODUCTION_MODE:
+    if not settings.DEBUG:
         if not getattr(settings, 'SECURE_SSL_REDIRECT', False):
             warnings.append("建议启用 SECURE_SSL_REDIRECT 强制 HTTPS 重定向")
 
@@ -55,7 +52,7 @@ def check_production_readiness():
 
     # 7. 检查数据库配置
     db_engine = settings.DATABASES['default']['ENGINE']
-    if 'sqlite3' in db_engine and settings.PRODUCTION_MODE:
+    if 'sqlite3' in db_engine and not settings.DEBUG:
         warnings.append("生产环境建议使用 PostgreSQL 或 MySQL 而不是 SQLite")
 
     return errors, warnings
@@ -68,7 +65,7 @@ def print_production_status():
     print("\n" + "="*60)
     print("ZASCA 生产环境安全性检查报告")
     print("="*60)
-    print(f"生产模式: {'是' if settings.PRODUCTION_MODE else '否'}")
+    print(f"生产模式: {'是' if not settings.DEBUG else '否'}")
     print(f"DEBUG 模式: {'是' if settings.DEBUG else '否'}")
     print(f"秘密密钥: {'已设置' if os.environ.get('DJANGO_SECRET_KEY') else '未设置'}")
 

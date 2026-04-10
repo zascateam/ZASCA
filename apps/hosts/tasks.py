@@ -4,14 +4,43 @@ from apps.hosts.models import Host
 from apps.tasks.models import AsyncTask
 from apps.certificates.models import ServerCertificate, ClientCertificate
 import logging
-import winrm
+import re
 
 logger = logging.getLogger(__name__)
+
+CERT_THUMBPRINT_PATTERN = re.compile(r'^[A-Fa-f0-9]{40}$')
+CERT_FILENAME_PATTERN = re.compile(r'^[a-zA-Z0-9_\-\.]{1,255}\.pem$')
+
+
+def validate_cert_thumbprint(thumbprint: str) -> str:
+    if not thumbprint:
+        raise ValueError("证书指纹不能为空")
+    thumbprint = thumbprint.strip().upper()
+    if not CERT_THUMBPRINT_PATTERN.match(thumbprint):
+        raise ValueError("证书指纹格式无效，必须是40位十六进制字符")
+    return thumbprint
+
+
+def validate_cert_filename(filename: str) -> str:
+    if not filename:
+        raise ValueError("证书文件名不能为空")
+    if not CERT_FILENAME_PATTERN.match(filename):
+        raise ValueError("证书文件名格式无效，只允许字母、数字、下划线、连字符和点，且必须以.pem结尾")
+    return filename
+
+
+def validate_cert_content(content: str) -> str:
+    if not content:
+        raise ValueError("证书内容不能为空")
+    if '@"' in content or '"@' in content:
+        raise ValueError("证书内容包含非法字符")
+    if len(content) > 100000:
+        raise ValueError("证书内容过长")
+    return content
 
 
 @shared_task(bind=True)
 def configure_winrm_on_host(self, host_id, cert_thumbprint=None, operator_id=None):
-    """配置主机上的WinRM服务"""
     task = AsyncTask.objects.create(
         task_id=self.request.id,
         name=f"配置WinRM - 主机 #{host_id}",
@@ -25,59 +54,56 @@ def configure_winrm_on_host(self, host_id, cert_thumbprint=None, operator_id=Non
         host = Host.objects.get(id=host_id)
         task.start_execution()
         
-        # 更新进度
         task.progress = 10
         task.save()
         
-        # 使用现有的连接信息测试连接
         try:
-            session = winrm.Session(
-                f'http://{host.ip_address}:{host.port}',
-                auth=(host.username, host.password)
+            from utils.winrm_client import WinrmClient
+            
+            client = WinrmClient(
+                hostname=host.hostname or host.ip_address,
+                port=host.port,
+                username=host.username,
+                password=host.password,
+                use_ssl=host.use_ssl
             )
             
-            # 配置WinRM服务
+            actual_thumbprint = cert_thumbprint or host.certificate_thumbprint
+            if actual_thumbprint:
+                actual_thumbprint = validate_cert_thumbprint(actual_thumbprint)
+            
             ps_script = '''
-            # 启用WinRM服务
             Enable-PSRemoting -Force
-            
-            # 配置WinRM服务为自动启动
             Set-Service -Name WinRM -StartupType Automatic
+            '''
             
-            # 创建HTTPS监听器
-            $currentUrl = "https://" + $env:COMPUTERNAME + ":5986/wsman"
-            $selectorset = @{Transport="HTTPS"}
-            $resourceset = @{Port="5986"; CertificateThumbprint="%s"}
+            if actual_thumbprint:
+                ps_script += f'''
+                $selectorset = @{{Transport="HTTPS"}}
+                $resourceset = @{{Port="5986"; CertificateThumbprint="{actual_thumbprint}"}}
+                Get-WSManInstance -ResourceURI winrm/config/listener -SelectorSet $selectorset -ErrorAction SilentlyContinue | Remove-WSManInstance -ErrorAction SilentlyContinue
+                New-WSManInstance -ResourceURI winrm/config/listener -SelectorSet $selectorset -ValueSet $resourceset
+                if (-not (Get-NetFirewallRule -Name "WinRM-HTTPS-In-TCP-Public" -ErrorAction SilentlyContinue)) {{
+                    New-NetFirewallRule -Name "WinRM-HTTPS-In-TCP-Public" -DisplayName "WinRM HTTPS Inbound" -Enabled True -Direction Inbound -Protocol TCP -LocalPort 5986 -Action Allow -Profile Public,Private,Domain
+                }}
+                '''
             
-            # 删除现有的HTTPS监听器
-            Get-WSManInstance -ResourceURI winrm/config/listener -SelectorSet $selectorset -ErrorAction SilentlyContinue | Remove-WSManInstance -ErrorAction SilentlyContinue
-            
-            # 创建新的HTTPS监听器
-            New-WSManInstance -ResourceURI winrm/config/listener -SelectorSet $selectorset -ValueSet $resourceset
-            
-            # 配置防火墙规则
-            if (-not (Get-NetFirewallRule -Name "WinRM-HTTPS-In-TCP-Public" -ErrorAction SilentlyContinue)) {
-                New-NetFirewallRule -Name "WinRM-HTTPS-In-TCP-Public" -DisplayName "WinRM HTTPS Inbound" -Enabled True -Direction Inbound -Protocol TCP -LocalPort 5986 -Action Allow -Profile Public,Private,Domain
-            }
-            
-            # 配置基本认证
+            ps_script += '''
             Set-Item -Path "WSMan:\\localhost\\Service\\AllowUnencrypted" -Value $false
             Set-Item -Path "WSMan:\\localhost\\Service\\Auth\\Basic" -Value $true
-            
-            # 重启WinRM服务
             Restart-Service WinRM
-            ''' % (cert_thumbprint or host.certificate_thumbprint or "PLACEHOLDER_CERT_THUMBPRINT")
+            '''
             
             task.progress = 30
             task.save()
             
-            result = session.run_ps(ps_script)
+            result = client.execute_powershell(ps_script)
             
             if result.status_code == 0:
                 task.progress = 80
                 task.save()
                 
-                # 更新主机状态
+                from django.utils import timezone
                 host.init_status = 'ready'
                 host.initialized_at = timezone.now()
                 if cert_thumbprint:
@@ -87,7 +113,7 @@ def configure_winrm_on_host(self, host_id, cert_thumbprint=None, operator_id=Non
                 task.progress = 100
                 task.complete_success({
                     'status_code': result.status_code,
-                    'stdout': result.std_out.decode('utf-8') if result.std_out else '',
+                    'stdout': result.std_out,
                     'success': True
                 })
                 
@@ -97,7 +123,7 @@ def configure_winrm_on_host(self, host_id, cert_thumbprint=None, operator_id=Non
                     'host_id': host_id
                 }
             else:
-                error_msg = result.std_err.decode('utf-8') if result.std_err else 'Unknown error'
+                error_msg = result.std_err if result.std_err else 'Unknown error'
                 task.complete_failure(f"PowerShell script failed: {error_msg}")
                 
                 return {
@@ -127,7 +153,6 @@ def configure_winrm_on_host(self, host_id, cert_thumbprint=None, operator_id=Non
 
 @shared_task(bind=True)
 def test_winrm_connection(self, host_id, use_certificate_auth=False):
-    """测试WinRM连接"""
     task = AsyncTask.objects.create(
         task_id=self.request.id,
         name=f"测试WinRM连接 - 主机 #{host_id}",
@@ -139,15 +164,12 @@ def test_winrm_connection(self, host_id, use_certificate_auth=False):
         task.start_execution()
         
         if use_certificate_auth and host.certificate_thumbprint:
-            # 使用证书认证
-            import ssl
             import tempfile
             import os
             
-            # 创建临时客户端证书文件用于认证
             client_cert = ClientCertificate.objects.filter(is_active=True).first()
             if not client_cert:
-                # 如果没有可用的客户端证书，创建一个
+                from apps.certificates.models import CertificateAuthority
                 ca = host.get_ca() if hasattr(host, 'get_ca') else None
                 if not ca:
                     ca, _ = CertificateAuthority.objects.get_or_create(
@@ -165,7 +187,6 @@ def test_winrm_connection(self, host_id, use_certificate_auth=False):
                 client_cert.generate_client_cert(f'client-{host.hostname}')
                 client_cert.save()
             
-            # 保存证书到临时文件
             with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pem') as cert_file:
                 cert_file.write(client_cert.certificate)
                 cert_file_path = cert_file.name
@@ -175,33 +196,35 @@ def test_winrm_connection(self, host_id, use_certificate_auth=False):
                 key_file_path = key_file.name
             
             try:
-                session = winrm.Session(
-                    f'https://{host.ip_address}:5986',
-                    auth=(None, None),  # 使用证书认证，不需要用户名密码
+                from utils.winrm_client import WinrmClient
+                client = WinrmClient(
+                    hostname=host.hostname or host.ip_address,
+                    port=5986,
+                    username='',
+                    password='',
+                    use_ssl=True,
                     server_cert_validation='validate',
-                    cert_pem=cert_file_path,
-                    key_pem=key_file_path
+                    client_cert_pem=cert_file_path,
+                    client_cert_key=key_file_path
                 )
                 
-                # 执行简单命令测试连接
-                result = session.run_cmd('echo "Connection Test"')
-                
+                result = client.execute_command('echo', ['Connection Test'])
                 success = result.status_code == 0
                 
             finally:
-                # 清理临时文件
                 os.unlink(cert_file_path)
                 os.unlink(key_file_path)
         else:
-            # 使用基本认证
-            session = winrm.Session(
-                f'http://{host.ip_address}:{host.port}',
-                auth=(host.username, host.password)
+            from utils.winrm_client import WinrmClient
+            client = WinrmClient(
+                hostname=host.hostname or host.ip_address,
+                port=host.port,
+                username=host.username,
+                password=host.password,
+                use_ssl=host.use_ssl
             )
             
-            # 执行简单命令测试连接
-            result = session.run_cmd('echo "Connection Test"')
-            
+            result = client.execute_command('echo', ['Connection Test'])
             success = result.status_code == 0
         
         if success:
@@ -238,7 +261,6 @@ def test_winrm_connection(self, host_id, use_certificate_auth=False):
 
 @shared_task(bind=True)
 def install_certificates_on_host(self, host_id, cert_pem, cert_filename, operator_id=None):
-    """在主机上安装证书"""
     task = AsyncTask.objects.create(
         task_id=self.request.id,
         name=f"安装证书 - 主机 #{host_id}",
@@ -252,47 +274,51 @@ def install_certificates_on_host(self, host_id, cert_pem, cert_filename, operato
         host = Host.objects.get(id=host_id)
         task.start_execution()
         
-        # 将证书内容写入PowerShell脚本
+        cert_filename = validate_cert_filename(cert_filename)
+        cert_pem = validate_cert_content(cert_pem)
+        
+        from utils.winrm_client import WinrmClient, _escape_for_here_string
+        
+        client = WinrmClient(
+            hostname=host.hostname or host.ip_address,
+            port=host.port,
+            username=host.username,
+            password=host.password,
+            use_ssl=host.use_ssl
+        )
+        
+        safe_cert_content = _escape_for_here_string(cert_pem)
+        safe_filename = cert_filename.replace('"', '').replace("'", '').replace(';', '')
+        
         ps_script = f'''
-        # 创建临时目录
         $tempDir = "$env:TEMP\\ZASCA_Certs"
         if (!(Test-Path $tempDir)) {{
             New-Item -ItemType Directory -Path $tempDir -Force
         }}
         
-        # 写入证书内容到临时文件
         $certContent = @"
-{cert_pem}
+{safe_cert_content}
 "@
         
-        $certPath = Join-Path $tempDir "{cert_filename}"
+        $certPath = Join-Path $tempDir "{safe_filename}"
         $certContent | Out-File -FilePath $certPath -Encoding UTF8
         
-        # 导入证书到受信任的根证书颁发机构存储区
         Import-Certificate -FilePath $certPath -CertStoreLocation Cert:\\LocalMachine\\Root
-        
-        # 导入证书到个人存储区
         Import-Certificate -FilePath $certPath -CertStoreLocation Cert:\\LocalMachine\\My
         
         Write-Output "Certificate installed successfully"
         
-        # 清理临时文件
         Remove-Item $tempDir -Recurse -Force
         '''
         
-        session = winrm.Session(
-            f'http://{host.ip_address}:{host.port}',
-            auth=(host.username, host.password)
-        )
-        
-        result = session.run_ps(ps_script)
+        result = client.execute_powershell(ps_script)
         
         if result.status_code == 0:
             task.progress = 100
             task.complete_success({
                 'installed': True,
                 'cert_filename': cert_filename,
-                'output': result.std_out.decode('utf-8') if result.std_out else ''
+                'output': result.std_out
             })
             
             return {
@@ -300,7 +326,7 @@ def install_certificates_on_host(self, host_id, cert_pem, cert_filename, operato
                 'installed': True
             }
         else:
-            error_msg = result.std_err.decode('utf-8') if result.std_err else 'Unknown error'
+            error_msg = result.std_err if result.std_err else 'Unknown error'
             task.complete_failure(f"Certificate installation failed: {error_msg}")
             
             return {

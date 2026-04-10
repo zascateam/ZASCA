@@ -35,6 +35,36 @@
                         </div>
 
                         <div class="mb-4">
+                            <h5>备案信息</h5>
+                            <div class="row">
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.icp_number.id_for_label }}" class="form-label">{{ form.icp_number.label }}</label>
+                                        {{ form.icp_number }}
+                                        {% if form.icp_number.help_text %}
+                                        <small class="form-text text-muted">{{ form.icp_number.help_text }}</small>
+                                        {% endif %}
+                                        {% for error in form.icp_number.errors %}
+                                        <div class="text-danger">{{ error }}</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                                <div class="col-md-6">
+                                    <div class="mb-3">
+                                        <label for="{{ form.police_number.id_for_label }}" class="form-label">{{ form.police_number.label }}</label>
+                                        {{ form.police_number }}
+                                        {% if form.police_number.help_text %}
+                                        <small class="form-text text-muted">{{ form.police_number.help_text }}</small>
+                                        {% endif %}
+                                        {% for error in form.police_number.errors %}
+                                        <div class="text-danger">{{ error }}</div>
+                                        {% endfor %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="mb-4">
                             <h5>SMTP配置</h5>
                             <div class="row">
                                 <div class="col-md-6">

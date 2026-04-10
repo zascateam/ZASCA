@@ -4,9 +4,17 @@
 
 // 全局配置
 const Config = {
-    csrfToken: document.querySelector('[name=csrfmiddlewaretoken]')?.value || '',
     apiBase: '/api/',
 };
+
+function getCsrfToken() {
+    return document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
+           document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+           document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] ||
+           '';
+}
+
+Config.csrfToken = getCsrfToken();
 
 // 工具函数
 const Utils = {
@@ -264,3 +272,4 @@ window.Config = Config;
 window.Utils = Utils;
 window.API = API;
 window.FormHandler = FormHandler;
+window.getCsrfToken = getCsrfToken;

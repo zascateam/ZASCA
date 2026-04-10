@@ -4,6 +4,7 @@
 from django.db import models
 from django.utils.translation import gettext_lazy as _
 from django.contrib.auth import get_user_model
+from django.conf import settings
 from django.utils import timezone
 from django.dispatch import Signal
 import logging
@@ -239,13 +240,67 @@ class SystemTask(models.Model):
         self.save(update_fields=['status', 'completed_at'])
 
 
+class ProductGroup(models.Model):
+    """
+    产品组模型
+    
+    用于对产品进行分组管理
+    """
+    name = models.CharField(
+        max_length=200,
+        verbose_name=_('产品组名称'),
+        help_text=_('产品组的名称')
+    )
+    description = models.TextField(
+        blank=True,
+        verbose_name=_('产品组描述'),
+        help_text=_('产品组的详细描述，支持Markdown格式')
+    )
+    display_order = models.IntegerField(
+        default=0,
+        verbose_name=_('显示顺序'),
+        help_text=_('产品组在前端展示的顺序，数字越小越靠前')
+    )
+    is_active = models.BooleanField(
+        default=True,
+        verbose_name=_('是否启用'),
+        help_text=_('是否在前端展示此产品组')
+    )
+    auto_assign_providers = models.ManyToManyField(
+        User,
+        blank=True,
+        related_name='auto_product_groups',
+        verbose_name=_('自动分配提供商'),
+        help_text=_('这些提供商创建的产品将自动加入此产品组')
+    )
+    created_at = models.DateTimeField(
+        auto_now_add=True,
+        verbose_name=_('创建时间')
+    )
+    updated_at = models.DateTimeField(
+        auto_now=True,
+        verbose_name=_('更新时间')
+    )
+
+    class Meta:
+        verbose_name = _('产品组')
+        verbose_name_plural = _('产品组')
+        ordering = ['display_order', 'name']
+        indexes = [
+            models.Index(fields=['is_active']),
+            models.Index(fields=['display_order']),
+        ]
+
+    def __str__(self):
+        return self.name
+
+
 class Product(models.Model):
     """
     产品模型
 
     代表面向用户的产品，一个主机可以对应多个产品
     """
-    # 产品基本信息
     name = models.CharField(
         max_length=200,
         verbose_name=_('产品名称'),
@@ -265,6 +320,16 @@ class Product(models.Model):
         blank=True,
         verbose_name=_('显示描述'),
         help_text=_('在前端展示的产品描述，支持Markdown格式')
+    )
+    
+    product_group = models.ForeignKey(
+        ProductGroup,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='products',
+        verbose_name=_('产品组'),
+        help_text=_('产品所属的产品组')
     )
     
     # 关联主机
@@ -299,6 +364,17 @@ class Product(models.Model):
         help_text=_('是否自动批准针对此产品的开户申请')
     )
     
+    # 创建者
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name=_('创建者'),
+        help_text=_('创建此产品的用户'),
+        related_name='created_products'
+    )
+    
     # 时间信息
     created_at = models.DateTimeField(
         auto_now_add=True,
@@ -316,6 +392,8 @@ class Product(models.Model):
             models.Index(fields=['is_available']),
             models.Index(fields=['host']),
             models.Index(fields=['created_at']),
+            models.Index(fields=['created_by']),
+            models.Index(fields=['product_group'], name='operations__product_981a27_idx'),
         ]
 
     def __str__(self):
@@ -472,7 +550,8 @@ class AccountOpeningRequest(models.Model):
         ]
 
     def __str__(self):
-        return f'{self.username} - {self.target_product.display_name}'
+        product_name = self.target_product.display_name if self.target_product else 'Unknown Product'
+        return f'{self.username} - {product_name}'
 
     def approve(self, approver, notes=''):
         """
@@ -555,7 +634,6 @@ class AccountOpeningRequest(models.Model):
         if is_new_instance:
             # 发送提交前信号，允许插件进行验证
             logger.info(f"AccountOpeningRequest.save(): 发送 pre-submit 信号，实例ID: {self.pk}, 目标产品: {getattr(self.target_product, 'id', 'None')}, 联系邮箱: {self.contact_email}")
-            from .models import account_opening_request_pre_submit
             account_opening_request_pre_submit.send(sender=self.__class__, instance=self)
             logger.info(f"AccountOpeningRequest.save(): pre-submit 信号发送完成，实例状态: {self.status}")
 
@@ -575,12 +653,14 @@ class AccountOpeningRequest(models.Model):
             self.status = 'approved'
             # 使用系统作为审批人，而不是None
             from django.contrib.auth import get_user_model
+            from typing import cast
             User = get_user_model()
-            system_user = User.objects.filter(is_superuser=True).first()  # 使用第一个超级用户作为系统用户
-            self.approved_by = system_user
+            system_user = User.objects.filter(is_superuser=True).first()
+            if system_user:
+                self.approved_by = cast(User, system_user)
             self.approval_date = timezone.now()
             self.approval_notes = '自动审核通过'
-            auto_approved = True  # 标记为自动批准
+            auto_approved = True
 
         # 调用父类的save方法保存数据
         super().save(*args, **kwargs)
@@ -588,7 +668,6 @@ class AccountOpeningRequest(models.Model):
         # 如果是新实例，在保存后发送后提交信号
         if is_new_instance:
             logger.info(f"AccountOpeningRequest.save(): 发送 post-submit 信号，实例ID: {self.pk}, 最终状态: {self.status}")
-            from .models import account_opening_request_post_submit
             account_opening_request_post_submit.send(sender=self.__class__, instance=self)
 
         # 如果状态从'pending'变更为'approved'，则自动处理用户创建
@@ -605,6 +684,10 @@ class AccountOpeningRequest(models.Model):
         import os
 
         product = self.target_product
+        if not product:
+            logger.error(f"AccountOpeningRequest {self.id} has no target_product")
+            return
+        
         host = product.host
 
         # DEMO模式
@@ -863,12 +946,8 @@ class CloudComputerUser(models.Model):
                 self.delete_remote_user()
 
     def disable_remote_user(self):
-        """
-        在远程主机上禁用用户
-        """
         import os
         if os.environ.get('ZASCA_DEMO', '').lower() == '1':
-            # 在DEMO模式下，不执行实际操作
             import logging
             logger = logging.getLogger(__name__)
             logger.info(f'DEMO模式: 模拟禁用用户 {self.username} 在产品 {self.product.display_name}')
@@ -877,7 +956,6 @@ class CloudComputerUser(models.Model):
         try:
             from utils.winrm_client import WinrmClient
             
-            # 连接到产品关联的主机
             product = self.product
             host = product.host
             client = WinrmClient(
@@ -888,13 +966,7 @@ class CloudComputerUser(models.Model):
                 use_ssl=host.use_ssl
             )
             
-            # 禁用用户的PowerShell命令
-            disable_user_cmd = f'''
-            Disable-LocalUser -Name "{self.username}"
-            Write-Output "User {self.username} disabled successfully"
-            '''
-            
-            result = client.execute_powershell(disable_user_cmd)
+            result = client.disabled_user(self.username)
             if result.status_code != 0:
                 error_msg = result.std_err if result.std_err else 'Unknown error'
                 print(f"Failed to disable user {self.username} on host {host.name}: {error_msg}")
@@ -902,12 +974,8 @@ class CloudComputerUser(models.Model):
             print(f"Error disabling user {self.username} on host {host.name}: {str(e)}")
 
     def enable_remote_user(self):
-        """
-        在远程主机上启用用户
-        """
         import os
         if os.environ.get('ZASCA_DEMO', '').lower() == '1':
-            # 在DEMO模式下，不执行实际操作
             import logging
             logger = logging.getLogger(__name__)
             logger.info(f'DEMO模式: 模拟启用用户 {self.username} 在产品 {self.product.display_name}')
@@ -916,7 +984,6 @@ class CloudComputerUser(models.Model):
         try:
             from utils.winrm_client import WinrmClient
             
-            # 连接到产品关联的主机
             product = self.product
             host = product.host
             client = WinrmClient(
@@ -927,13 +994,7 @@ class CloudComputerUser(models.Model):
                 use_ssl=host.use_ssl
             )
             
-            # 启用用户的PowerShell命令
-            enable_user_cmd = f'''
-            Enable-LocalUser -Name "{self.username}"
-            Write-Output "User {self.username} enabled successfully"
-            '''
-            
-            result = client.execute_powershell(enable_user_cmd)
+            result = client.enable_user(self.username)
             if result.status_code != 0:
                 error_msg = result.std_err if result.std_err else 'Unknown error'
                 print(f"Failed to enable user {self.username} on host {host.name}: {error_msg}")
@@ -941,12 +1002,8 @@ class CloudComputerUser(models.Model):
             print(f"Error enabling user {self.username} on host {host.name}: {str(e)}")
 
     def delete_remote_user(self):
-        """
-        在远程主机上删除用户
-        """
         import os
         if os.environ.get('ZASCA_DEMO', '').lower() == '1':
-            # 在DEMO模式下，不执行实际操作
             import logging
             logger = logging.getLogger(__name__)
             logger.info(f'DEMO模式: 模拟删除用户 {self.username} 在产品 {self.product.display_name}')
@@ -955,7 +1012,6 @@ class CloudComputerUser(models.Model):
         try:
             from utils.winrm_client import WinrmClient
             
-            # 连接到产品关联的主机
             product = self.product
             host = product.host
             client = WinrmClient(
@@ -966,13 +1022,7 @@ class CloudComputerUser(models.Model):
                 use_ssl=host.use_ssl
             )
             
-            # 删除用户的PowerShell命令
-            delete_user_cmd = f'''
-            Remove-LocalUser -Name "{self.username}"
-            Write-Output "User {self.username} deleted successfully"
-            '''
-            
-            result = client.execute_powershell(delete_user_cmd)
+            result = client.delete_user(self.username)
             if result.status_code != 0:
                 error_msg = result.std_err if result.std_err else 'Unknown error'
                 print(f"Failed to delete user {self.username} on host {host.name}: {error_msg}")
@@ -997,12 +1047,8 @@ class CloudComputerUser(models.Model):
         return password
 
     def reset_windows_password(self, new_password):
-        """
-        重置Windows用户密码
-        """
         import os
         if os.environ.get('ZASCA_DEMO', '').lower() == '1':
-            # 在DEMO模式下，不执行实际操作
             import logging
             logger = logging.getLogger(__name__)
             logger.info(f'DEMO模式: 模拟重置用户 {self.username} 的密码')
@@ -1011,7 +1057,6 @@ class CloudComputerUser(models.Model):
         try:
             from utils.winrm_client import WinrmClient
             
-            # 连接到产品关联的主机
             product = self.product
             host = product.host
             client = WinrmClient(

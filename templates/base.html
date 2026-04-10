@@ -5,19 +5,51 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}ZASCA{% endblock %}</title>
 
     <!-- CSS -->
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- Preload Material Icons Font -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/icon?family=Material+Icons">
+    
     <link rel="stylesheet" href="{% static 'css/theme.css' %}">
     <link rel="stylesheet" href="{% static 'css/base.css' %}">
     {% block extra_css %}{% endblock %}
 
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="/static/img/favicon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
     
     <style>
+        /* 隐藏图标直到字体加载完成 - 防止闪烁 */
+        .material-icons {
+            font-display: block;
+            opacity: 0;
+            transition: opacity 0.1s ease-in;
+        }
+        
+        .material-icons.material-icons-loaded {
+            opacity: 1;
+        }
+    
+        /* 导航栏图标固定尺寸 - 防止字体加载时布局跳动 */
+        .md-nav-link .material-icons,
+        .md-user-button .material-icons,
+        .md-dropdown-item .material-icons {
+            width: 18px;
+            height: 18px;
+            min-width: 18px;
+            min-height: 18px;
+            font-size: 18px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            overflow: hidden;
+        }
+    
         /* MD3导航栏样式 */
         .md-navbar {
             background-color: var(--md-sys-color-surface);
@@ -36,17 +68,18 @@
         }
         
         .md-navbar-brand {
-            font-size: var(--md-sys-typescale-title-large-size);
-            font-weight: var(--md-sys-typescale-weight-bold);
-            color: var(--md-sys-color-primary);
-            text-decoration: none;
             display: flex;
             align-items: center;
+            text-decoration: none;
+        }
+        
+        .md-navbar-brand img {
+            height: 32px;
+            width: auto;
         }
         
         .md-navbar-brand:hover {
-            color: var(--md-sys-color-primary);
-            text-decoration: none;
+            opacity: 0.9;
         }
         
         .md-navbar-nav {
@@ -72,6 +105,8 @@
             font-size: var(--md-sys-typescale-label-large-size);
             font-weight: var(--md-sys-typescale-weight-medium);
             transition: all var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+            min-height: 40px;
+            white-space: nowrap;
         }
         
         .md-nav-link:hover {
@@ -232,7 +267,7 @@
     <!-- MD3导航栏 -->
     <nav class="md-navbar">
         <div class="md-navbar-container">
-            <a class="md-navbar-brand" href="{% url 'dashboard:index' %}">ZASCA</a>
+            <a class="md-navbar-brand" href="{% url 'dashboard:index' %}"><img src="/static/img/favicon.svg" alt="ZASCA" style="height: 32px; width: auto;"></a>
             
             <button class="md-navbar-toggler" id="navbarToggle">
                 <i class="material-icons">menu</i>
@@ -297,6 +332,15 @@
             </ul>
             
             <div class="md-user-menu">
+                <!-- 主题切换按钮 -->
+                <div class="theme-toggle-wrapper" style="margin-right: var(--md-sys-spacing-padding-md); display: flex; align-items: center;">
+                    <button class="theme-toggle" id="themeToggle" title="切换主题" aria-label="切换深色/浅色模式">
+                        <span class="theme-toggle-knob" id="themeToggleKnob">
+                            <i class="material-icons" id="themeIcon">light_mode</i>
+                        </span>
+                    </button>
+                </div>
+
                 {% if user.is_authenticated %}
                     <div class="md-user-dropdown">
                         <button class="md-user-button" id="userDropdown">
@@ -354,9 +398,26 @@
     </main>
 
     <!-- 页脚 -->
-    <footer class="bg-light mt-5 py-3">
-        <div class="container text-center text-muted">
-            <p class="mb-0">&copy; {% now "Y" %} ZASCA. All rights reserved.</p>
+    <footer class="footer-glass mt-5 py-3">
+        <div class="container text-center">
+            <p class="mb-1">&copy; {% now "Y" %} ZASCA. All rights reserved.</p>
+            {% if system_config %}
+                <div class="mb-1">
+                    {% if system_config.icp_number %}
+                        <a href="https://beian.miit.gov.cn/" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">
+                            {{ system_config.icp_number }}
+                        </a>
+                    {% endif %}
+                </div>
+                {% if system_config.police_number %}
+                    <div class="mb-0">
+                        <img src="{% static 'img/head-logo.png' %}" width="20"/>
+                        <a href="https://beian.mps.gov.cn/" target="_blank" rel="noopener noreferrer" style="color: inherit; text-decoration: none;">
+                            {{ system_config.police_number }}
+                        </a>
+                    </div>
+                {% endif %}
+            {% endif %}
         </div>
     </footer>
 
@@ -366,44 +427,174 @@
     {% block extra_js %}{% endblock %}
     
     <script>
-        // MD3导航栏交互逻辑
+        // ==================== 主题管理系统 ====================
+        const ThemeManager = {
+            // 当前主题
+            currentTheme: 'light',
+
+            // 初始化
+            init() {
+                // 从 localStorage 读取保存的主题偏好
+                this.currentTheme = localStorage.getItem('theme') || this.getSystemTheme();
+                this.applyTheme(this.currentTheme);
+
+                // 绑定主题切换按钮事件
+                const themeToggle = document.getElementById('themeToggle');
+                if (themeToggle) {
+                    themeToggle.addEventListener('click', () => this.toggleTheme());
+                }
+
+                // 监听系统主题变化（如果用户没有手动设置）
+                window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+                    if (!localStorage.getItem('theme')) {
+                        this.applyTheme(e.matches ? 'dark' : 'light');
+                    }
+                });
+            },
+
+            // 获取系统主题偏好
+            getSystemTheme() {
+                return window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+            },
+
+            // 应用主题
+            applyTheme(theme) {
+                this.currentTheme = theme;
+
+                // 设置 data-theme 属性
+                document.documentElement.setAttribute('data-theme', theme);
+
+                // 更新图标
+                const themeIcon = document.getElementById('themeIcon');
+                if (themeIcon) {
+                    themeIcon.textContent = theme === 'dark' ? 'dark_mode' : 'light_mode';
+                    themeIcon.style.color = theme === 'dark' ? '#fbbf24' : '#1e3a5f';
+                }
+
+                // 更新 meta 标签（如果存在）
+                const metaThemeColor = document.querySelector('meta[name="theme-color"]');
+                if (metaThemeColor) {
+                    metaThemeColor.setAttribute('content', theme === 'dark' ? '#0f172a' : '#ffffff');
+                }
+
+                // 触发自定义事件
+                window.dispatchEvent(new CustomEvent('themeChanged', { detail: { theme } }));
+
+                console.log(`[ZASCA] 主题已切换为: ${theme}`);
+            },
+
+            // 切换主题
+            toggleTheme() {
+                const newTheme = this.currentTheme === 'dark' ? 'light' : 'dark';
+                this.applyTheme(newTheme);
+                localStorage.setItem('theme', newTheme);
+            }
+        };
+
+        // ==================== MD3 导航栏交互逻辑 ====================
         document.addEventListener('DOMContentLoaded', function() {
+            // 字体加载检测 - 防止图标闪烁
+            document.fonts.ready.then(function() {
+                document.querySelectorAll('.material-icons').forEach(function(icon) {
+                    icon.classList.add('material-icons-loaded');
+                });
+            });
+            
+            // 初始化主题管理器
+            ThemeManager.init();
+
             // 移动端菜单切换
             const navbarToggle = document.getElementById('navbarToggle');
             const navbarNav = document.getElementById('navbarNav');
-            
+
             if (navbarToggle && navbarNav) {
                 navbarToggle.addEventListener('click', function() {
                     navbarNav.classList.toggle('mobile-show');
+
+                    // 动画效果
+                    if (navbarNav.classList.contains('mobile-show')) {
+                        navbarNav.style.animation = 'slideInDown 0.2s ease-out';
+                    }
                 });
             }
-            
+
             // 用户下拉菜单
             const userDropdown = document.getElementById('userDropdown');
             const userDropdownMenu = document.getElementById('userDropdownMenu');
-            
+
             if (userDropdown && userDropdownMenu) {
                 userDropdown.addEventListener('click', function(e) {
                     e.stopPropagation();
                     userDropdownMenu.classList.toggle('show');
+
+                    // 添加动画类
+                    if (userDropdownMenu.classList.contains('show')) {
+                        userDropdownMenu.style.display = 'block';
+                    }
                 });
-                
+
                 // 点击外部关闭下拉菜单
                 document.addEventListener('click', function() {
                     userDropdownMenu.classList.remove('show');
                 });
             }
-            
+
             // 活动链接高亮
             const currentPath = window.location.pathname;
             const navLinks = document.querySelectorAll('.md-nav-link');
-            
+
             navLinks.forEach(link => {
+                // 移除所有 active 类
+                link.classList.remove('active');
+
+                // 检查当前路径是否匹配链接
                 if (link.getAttribute('href') === currentPath) {
                     link.classList.add('active');
                 }
+
+                // 添加悬停音效反馈（可选）
+                link.addEventListener('mouseenter', function() {
+                    this.style.transform = 'translateY(-1px)';
+                });
+
+                link.addEventListener('mouseleave', function() {
+                    this.style.transform = 'translateY(0)';
+                });
             });
+
+            // 页面加载动画
+            document.body.style.opacity = '0';
+            setTimeout(() => {
+                document.body.style.transition = 'opacity 0.3s ease-in-out';
+                document.body.style.opacity = '1';
+            }, 100);
+
+            // 添加键盘快捷键支持（Ctrl/Cmd + D 切换主题）
+            document.addEventListener('keydown', function(e) {
+                if ((e.ctrlKey || e.metaKey) && e.key === 'd') {
+                    e.preventDefault();
+                    ThemeManager.toggleTheme();
+                }
+            });
+
+            console.log('[ZASCA] 界面初始化完成 - 快捷键: Ctrl+D 切换主题');
         });
+
+        // 添加滑入动画样式
+        const style = document.createElement('style');
+        style.textContent = `
+            @keyframes slideInDown {
+                from {
+                    opacity: 0;
+                    transform: translateY(-10px);
+                }
+                to {
+                    opacity: 1;
+                    transform: translateY(0);
+                }
+            }
+        `;
+        document.head.appendChild(style);
     </script>
 </body>
 </html>

@@ -306,6 +306,39 @@
         font-size: var(--md-sys-typescale-headline-medium-size);
     }
 }
+
+/* 浅色模式适配 - 确保按钮文字可见 */
+.md-button--filled {
+    background-color: #1e3a5f !important;
+    color: #ffffff !important;
+}
+
+.md-button--filled .md-button__label {
+    color: #ffffff !important;
+}
+
+.md-button--filled .md-button__label i {
+    color: #ffffff !important;
+}
+
+/* 深色模式适配 */
+[data-theme="dark"] .md-button--filled {
+    background: linear-gradient(135deg, var(--md-sys-color-primary), var(--secondary-color)) !important;
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .md-button--filled .md-button__label {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .md-button--filled:hover {
+    background: linear-gradient(135deg, var(--md-sys-color-primary), var(--secondary-color)) !important;
+    box-shadow: var(--md-sys-elevation-level2);
+}
+
+[data-theme="dark"] .md-button--filled .md-button__label i {
+    color: #ffffff !important;
+}
 </style>
 {% endblock %}
 
@@ -314,59 +347,83 @@
     <div class="row">
         <div class="col-12">
             <h3 class="mb-4">云电脑产品</h3>
-            <div class="computer-grid">
-                {% for product in public_hosts %}
-                <div class="computer-card">
-                    <div class="computer-card-header">
-                        <h5 class="mb-0">
-                            <span class="status-indicator status-{{ product.status }}"></span>
-                            {{ product.display_name }}
-                        </h5>
-                    </div>
-                    <div class="computer-card-body">
-                        <ul class="list-unstyled">
-                            <li><strong>状态:</strong> 
-                                {% if product.status == 'online' %}
-                                    <span class="text-success">在线</span>
-                                {% elif product.status == 'offline' %}
-                                    <span class="text-danger">离线</span>
-                                {% elif product.status == 'error' %}
-                                    <span class="text-warning">错误</span>
-                                {% else %}
-                                    <span class="text-secondary">未知</span>
-                                {% endif %}
-                            </li>
-                            <li><strong>自动审核:</strong> 
-                                {% if product.auto_approval %}
-                                    <span class="text-success">已启用</span>
-                                {% else %}
-                                    <span class="text-warning">未启用</span>
-                                {% endif %}
-                            </li>
-                        </ul>
-                        {% if product.display_description %}
-                        <div class="markdown-content">
-                            {{ product.display_description|markdown_filter }}
+            
+            {% if grouped_products %}
+                {% for group_data in grouped_products %}
+                    {% if group_data.group %}
+                        <div class="product-group-section mb-4">
+                            <h4 class="mb-3" style="color: var(--md-sys-color-primary);">
+                                <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">folder</i>
+                                {{ group_data.group.name }}
+                            </h4>
+                            {% if group_data.group.description %}
+                                <p class="text-muted mb-3">{{ group_data.group.description }}</p>
+                            {% endif %}
                         </div>
-                        {% endif %}
-                        <div class="card-actions">
-                            <a href="{% url 'operations:account_opening_create' %}?target_product={{ product.id }}" class="md-button md-button--filled md-button--medium">
-                                <span class="md-button__label">
-                                    <i class="material-icons" style="font-size: 18px; margin-right: 8px;">cloud</i>
-                                    立即申请
-                                </span>
-                            </a>
+                    {% else %}
+                        <div class="product-group-section mb-4">
+                            <h4 class="mb-3" style="color: var(--md-sys-color-primary);">
+                                <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">widgets</i>
+                                其他产品
+                            </h4>
                         </div>
+                    {% endif %}
+                    
+                    <div class="computer-grid">
+                        {% for product in group_data.products %}
+                        <div class="computer-card">
+                            <div class="computer-card-header">
+                                <h5 class="mb-0">
+                                    <span class="status-indicator status-{{ product.status }}"></span>
+                                    {{ product.display_name }}
+                                </h5>
+                            </div>
+                            <div class="computer-card-body">
+                                <ul class="list-unstyled">
+                                    <li><strong>状态:</strong> 
+                                        {% if product.status == 'online' %}
+                                            <span class="text-success">在线</span>
+                                        {% elif product.status == 'offline' %}
+                                            <span class="text-danger">离线</span>
+                                        {% elif product.status == 'error' %}
+                                            <span class="text-warning">错误</span>
+                                        {% else %}
+                                            <span class="text-secondary">未知</span>
+                                        {% endif %}
+                                    </li>
+                                    <li><strong>自动审核:</strong> 
+                                        {% if product.auto_approval %}
+                                            <span class="text-success">已启用</span>
+                                        {% else %}
+                                            <span class="text-warning">未启用</span>
+                                        {% endif %}
+                                    </li>
+                                </ul>
+                                {% if product.display_description %}
+                                <div class="markdown-content">
+                                    {{ product.display_description|markdown_filter }}
+                                </div>
+                                {% endif %}
+                                <div class="card-actions">
+                                    <a href="{% url 'operations:account_opening_create' %}?target_product={{ product.id }}" class="md-button md-button--filled md-button--medium">
+                                        <span class="md-button__label">
+                                            <i class="material-icons" style="font-size: 18px; margin-right: 8px;">cloud</i>
+                                            立即申请
+                                        </span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
                     </div>
-                </div>
-                {% empty %}
+                {% endfor %}
+            {% else %}
                 <div class="col-12">
                     <div class="alert alert-info text-center">
                         暂无可用的云电脑主机
                     </div>
                 </div>
-                {% endfor %}
-            </div>
+            {% endif %}
         </div>
     </div>
 </div>

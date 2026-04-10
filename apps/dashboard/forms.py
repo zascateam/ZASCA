@@ -14,7 +14,10 @@ class DashboardWidgetForm(forms.ModelForm):
     """
     class Meta:
         model = DashboardWidget
-        fields = ['widget_type', 'title', 'display_order', 'is_enabled', 'widget_config']
+        fields = [
+            'widget_type', 'title', 'display_order',
+            'is_enabled', 'widget_config'
+        ]
         widgets = {
             'widget_type': forms.Select(attrs={
                 'class': 'form-control'
@@ -87,6 +90,8 @@ class SystemConfigForm(forms.ModelForm):
         model = SystemConfig
         fields = [
             'site_name',
+            'icp_number',
+            'police_number',
             'smtp_host',
             'smtp_port',
             'smtp_use_tls',
@@ -103,6 +108,14 @@ class SystemConfigForm(forms.ModelForm):
             'site_name': forms.TextInput(attrs={
                 'class': 'form-control',
                 'placeholder': '请输入站点名称'
+            }),
+            'icp_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '例如：京ICP备12345678号'
+            }),
+            'police_number': forms.TextInput(attrs={
+                'class': 'form-control',
+                'placeholder': '例如：京公网安备 11010502000000号'
             }),
             'enable_registration': forms.CheckboxInput(attrs={
                 'class': 'form-check-input'
@@ -133,11 +146,17 @@ class SystemConfigForm(forms.ModelForm):
             }),
             'captcha_id': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': '请输入验证码 ID (Geetest的captcha_id 或 Turnstile的site key)'
+                'placeholder': (
+                    '请输入验证码 ID '
+                    '(Geetest的captcha_id 或 Turnstile的site key)'
+                )
             }),
             'captcha_key': forms.TextInput(attrs={
                 'class': 'form-control',
-                'placeholder': '请输入验证码密钥 (Geetest的private_key 或 Turnstile的secret key)',
+                'placeholder': (
+                    '请输入验证码密钥 '
+                    '(Geetest的private_key 或 Turnstile的secret key)'
+                ),
                 'type': 'password'
             }),
             'captcha_provider': forms.Select(attrs={
@@ -149,7 +168,10 @@ class SystemConfigForm(forms.ModelForm):
             'email_suffix_list': forms.Textarea(attrs={
                 'class': 'form-control',
                 'rows': 5,
-                'placeholder': '每行一个邮箱后缀，例如：\n@example.com\n@gmail.com\n@company.com'
+                'placeholder': (
+                    '每行一个邮箱后缀，例如：\n'
+                    '@example.com\n@gmail.com\n@company.com'
+                )
             }),
         }
 
@@ -162,13 +184,17 @@ class SystemConfigForm(forms.ModelForm):
 
     def clean(self):
         cleaned = super().clean()
+        if cleaned is None:
+            cleaned = {}
         provider = cleaned.get('captcha_provider')
         errors = {}
 
         if provider in ['geetest', 'turnstile']:
             if not (cleaned.get('captcha_id') and cleaned.get('captcha_key')):
-                errors['captcha_id'] = f'启用 {self.instance.get_captcha_provider_display()} 时必须填写验证码 ID 和密钥。'
-                errors['captcha_key'] = f'启用 {self.instance.get_captcha_provider_display()} 时必须填写验证码 ID 和密钥。'
+                provider_display = self.instance.get_captcha_provider_display()
+                msg = f'启用 {provider_display} 时必须填写验证码 ID 和密钥。'
+                errors['captcha_id'] = msg
+                errors['captcha_key'] = msg
 
         if errors:
             raise forms.ValidationError(errors)
@@ -178,9 +204,14 @@ class SystemConfigForm(forms.ModelForm):
     def save(self, commit=True):
         # 保存前测试邮件配置
         config = super().save(commit=False)
-        
+
         # 如果SMTP配置存在，则测试邮件发送
-        if config.smtp_host and config.smtp_port and config.smtp_username and config.smtp_password and config.smtp_from_email:
+        smtp_configured = (
+            config.smtp_host and config.smtp_port and
+            config.smtp_username and config.smtp_password and
+            config.smtp_from_email
+        )
+        if smtp_configured:
             try:
                 send_mail(
                     subject='系统配置测试邮件',
@@ -191,7 +222,7 @@ class SystemConfigForm(forms.ModelForm):
                 )
             except Exception as e:
                 raise ValidationError(f'邮件配置测试失败: {str(e)}')
-        
+
         if commit:
             config.save()
         return config

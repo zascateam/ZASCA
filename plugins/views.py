@@ -64,9 +64,11 @@ def toggle_plugin(request, plugin_id):
             'message': f'插件状态已更新为 {"启用" if new_status else "禁用"}'
         })
     except Exception as e:
+        logger = __import__('logging').getLogger(__name__)
+        logger.error(f"Error toggling plugin: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': '操作失败，请稍后重试'
         }, status=400)
 
 

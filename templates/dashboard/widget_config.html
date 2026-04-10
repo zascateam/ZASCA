@@ -83,7 +83,7 @@ document.getElementById('widgetConfigForm').addEventListener('submit', function(
     fetch('{% url "dashboard:widget_config_api" %}', {
         method: 'POST',
         headers: {
-            'X-CSRFToken': formData.get('csrfmiddlewaretoken'),
+            'X-CSRFToken': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || formData.get('csrfmiddlewaretoken') || '',
             'Content-Type': 'application/json',
         },
         body: JSON.stringify({ widgets: widgets })

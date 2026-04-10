@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="{{ theme_config.active_theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,270 +10,34 @@
     <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- 主题 CSS -->
+    <link rel="stylesheet" href="/static/css/themes/_variables.css">
+    <link rel="stylesheet" href="/static/{{ theme_css_url }}">
+    
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/accounts.css">
+    <link rel="stylesheet" href="/static/css/auth-theme.css">
 
     <!-- Favicon -->
     <link rel="icon" href="/static/img/favicon.ico">
     
+    <!-- 自定义 CSS 变量 -->
+    {% if custom_css_vars %}
     <style>
-        body {
-            font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0a0f;
-            min-height: 100vh;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 20px;
-            line-height: 1.6;
-            overflow: hidden;
-            margin: 0;
-        }
-
-        .login-wrap {
-            width: 100%;
-            max-width: 400px;
-            background: #151520;
-            border-radius: 10px;
-            padding: 30px 40px;
-            position: relative;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
-        }
-
-        .login-wrap h3 {
-            color: #fff;
-            margin-bottom: 30px;
-            text-align: center;
-            font-weight: 400;
-        }
-
-        .form-group {
-            position: relative;
-            margin-bottom: 20px;
-        }
-
-        .form-control {
-            height: 50px;
-            background: #1a1a25;
-            border: 1px solid #2a2a35;
-            border-radius: 5px;
-            color: #fff;
-            font-size: 16px;
-            padding: 15px 20px 15px 20px;
-        }
-
-        .form-control:focus {
-            border-color: #00ff88;
-            background: rgba(26, 26, 37, 0.8);
-            box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.1);
-        }
-
-        .form-control::-webkit-input-placeholder { color: #a0a0b0; }
-        .form-control::-moz-placeholder { color: #a0a0b0; }
-        .form-control:-ms-input-placeholder { color: #a0a0b0; }
-        .form-control:-moz-placeholder { color: #a0a0b0; }
-
-        .field-icon {
-            position: absolute;
-            right: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #a0a0b0;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        .field-icon:hover {
-            color: #00ff88;
-        }
-
-        .btn {
-            height: 50px;
-            line-height: 1.5;
-            border-radius: 5px;
-            font-weight: 600;
-            background: linear-gradient(135deg, #00ff88, #0099ff);
-            border: none;
-            color: #0a0a0f;
-            font-size: 16px;
-            font-weight: 600;
-            cursor: pointer;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-            position: relative;
-            overflow: hidden;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-        }
-
-        .btn:hover {
-            transform: translateY(-2px);
-            box-shadow: 0 10px 30px rgba(0, 255, 136, 0.3);
-        }
-
-        .form-group.d-md-flex {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-        }
-
-        .w-50 {
-            width: 50%;
-        }
-
-        .w-100 {
-            width: 100%;
-        }
-
-        .text-md-right {
-            text-align: right;
-        }
-
-        .text-center {
-            text-align: center;
-        }
-
-        .checkbox-wrap {
-            display: block;
-            position: relative;
-            padding-left: 25px;
-            cursor: pointer;
-            font-size: 14px;
-            color: #a0a0b0;
-            -webkit-user-select: none;
-            -moz-user-select: none;
-            -ms-user-select: none;
-            user-select: none;
-        }
-
-        .checkbox-wrap input {
-            position: absolute;
-            opacity: 0;
-            cursor: pointer;
-            height: 0;
-            width: 0;
-        }
-
-        .checkmark {
-            position: absolute;
-            top: 0;
-            left: 0;
-            height: 18px;
-            width: 18px;
-            background-color: transparent;
-            border: 2px solid #2a2a35;
-            border-radius: 3px;
-        }
-
-        .checkbox-wrap:hover input ~ .checkmark {
-            border-color: #00ff88;
-        }
-
-        .checkbox-wrap input:checked ~ .checkmark {
-            background-color: #00ff88;
-            border-color: #00ff88;
-        }
-
-        .checkmark:after {
-            content: "";
-            position: absolute;
-            display: none;
-        }
-
-        .checkbox-wrap input:checked ~ .checkmark:after {
-            display: block;
-        }
-
-        .checkbox-wrap .checkmark:after {
-            left: 5px;
-            top: 1px;
-            width: 5px;
-            height: 10px;
-            border: solid white;
-            border-width: 0 3px 3px 0;
-            -webkit-transform: rotate(45deg);
-            -ms-transform: rotate(45deg);
-            transform: rotate(45deg);
-        }
-
-        a {
-            color: #a0a0b0;
-            text-decoration: none;
-            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-        }
-
-        a:hover {
-            color: #00ff88;
-        }
-
-        .switch-link {
-            display: block;
-            text-align: center;
-            margin-top: 20px;
-            padding-top: 20px;
-            border-top: 1px solid #2a2a35;
-        }
-
-        .switch-link a {
-            color: #00ff88;
-            font-weight: 500;
-            text-decoration: none;
-        }
-
-        .switch-link a:hover {
-            color: #0099ff;
-            text-shadow: 0 0 10px rgba(0, 153, 255, 0.5);
-        }
-
-        .heading-section {
-            color: #fff;
-            margin-bottom: 20px;
-        }
-
-        .mb-5 {
-            margin-bottom: 2rem;
-        }
-
-        .mb-4 {
-            margin-bottom: 1.5rem;
-        }
-
-        .mt-3 {
-            margin-top: 1rem;
-        }
-
-        .alert {
-            padding: 1rem;
-            border-radius: 5px;
-            margin-bottom: 1rem;
-        }
-
-        .alert-danger {
-            background: #3a0000;
-            border: 1px solid #ff0000;
-            color: #ff6666;
-        }
-
-        .alert-success {
-            background: #003a00;
-            border: 1px solid #00aa00;
-            color: #66ff66;
-        }
-
-        .invalid-feedback {
-            color: #ff6666;
-            font-size: 0.875em;
-        }
+    {{ custom_css_vars|safe }}
     </style>
+    {% endif %}
 </head>
-<body>
+<body class="auth-page">
     <div class="container">
         <div class="row justify-content-center">
             <div class="col-md-6 text-center mb-5">
-                <h2 class="heading-section">注册新账户</h2>
+                <h2 class="auth-heading">注册新账户</h2>
                 <!-- 消息提示 -->
                 {% if messages %}
                 {% for message in messages %}
-                <div class="alert alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show">
+                <div class="auth-alert auth-alert-{% if message.tags == 'error' %}danger{% else %}{{ message.tags }}{% endif %} alert-dismissible fade show">
                     {{ message }}
                     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
                 </div>
@@ -283,10 +47,10 @@
         </div>
         <div class="row justify-content-center">
             <div class="col-md-6 col-lg-4">
-                <div class="login-wrap p-0">
+                <div class="auth-wrap">
                     <h3 class="mb-4 text-center">创建新账户？</h3>
                     {% if form.non_field_errors %}
-                    <div class="alert alert-danger">
+                    <div class="auth-alert auth-alert-danger">
                         {{ form.non_field_errors }}
                     </div>
                     {% endif %}
@@ -294,9 +58,9 @@
                     <form method="post" action="{% url 'accounts:register' %}" class="signin-form" id="registerForm" novalidate>
                         {% csrf_token %}
                         
-                        <div class="form-group">
+                        <div class="auth-form-group">
                             <input type="text" 
-                                   class="form-control {% if form.username.errors %}is-invalid{% endif %}" 
+                                   class="auth-form-control {% if form.username.errors %}is-invalid{% endif %}" 
                                    placeholder="用户名" 
                                    name="{{ form.username.html_name }}"
                                    value="{{ form.username.value|default:'' }}"
@@ -304,74 +68,75 @@
                                    minlength="3"
                                    maxlength="150">
                             {% if form.username.errors %}
-                                <div class="invalid-feedback">{{ form.username.errors }}</div>
+                                <div class="auth-invalid-feedback">{{ form.username.errors }}</div>
                             {% endif %}
-                            <div class="form-text text-secondary">3-150个字符，只能包含字母、数字和@/./+/-/_</div>
+                            <div class="form-text" style="color: var(--login-on-surface-variant); font-size: 0.875em;">3-150个字符，只能包含字母、数字和@/./+/-/_</div>
                         </div>
                         
-                        <div class="form-group">
+                        <div class="auth-form-group">
                             <input type="email"
-                                   class="form-control {% if form.email.errors %}is-invalid{% endif %}"
+                                   class="auth-form-control {% if form.email.errors %}is-invalid{% endif %}"
                                    placeholder="邮箱"
                                    name="{{ form.email.html_name }}"
                                    value="{{ form.email.value|default:'' }}"
                                    required>
                             {% if form.email.errors %}
-                                <div class="invalid-feedback">{{ form.email.errors }}</div>
+                                <div class="auth-invalid-feedback">{{ form.email.errors }}</div>
                             {% endif %}
                         </div>
 
-                        <div class="form-group">
+                        <div class="auth-form-group" style="position: relative;">
                             <input type="text" 
                                    name="email_code" 
                                    id="id_email_code" 
-                                   class="form-control" 
+                                   class="auth-form-control" 
                                    placeholder="邮箱验证码" 
                                    required
-                                   autocomplete="off">
+                                   autocomplete="off"
+                                   style="padding-right: 110px;">
                             <!-- 根据验证码提供商显示不同的获取验证码按钮 -->
                             {% if CAPTCHA_PROVIDER == 'geetest' %}
-                                <button type="button" class="btn btn-outline-primary" id="get-email-code" data-geetest-trigger data-captcha-id="{{ GEETEST_ID }}" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);">获取验证码</button>
+                                <button type="button" class="btn btn-outline-primary" id="get-email-code" data-geetest-trigger data-captcha-id="{{ GEETEST_ID }}" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; padding: 5px 10px;">获取验证码</button>
                             {% elif CAPTCHA_PROVIDER == 'turnstile' %}
-                                <button type="button" class="btn btn-outline-primary" id="get-email-code" data-turnstile-trigger data-turnstile-sitekey="{{ TURNSTILE_SITE_KEY }}" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);">获取验证码</button>
+                                <button type="button" class="btn btn-outline-primary" id="get-email-code" data-turnstile-trigger data-turnstile-sitekey="{{ TURNSTILE_SITE_KEY }}" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; padding: 5px 10px;">获取验证码</button>
                             {% elif CAPTCHA_PROVIDER == 'local' %}
-                                <button type="button" class="btn btn-outline-primary" id="get-email-code" data-local-captcha-trigger data-action="get-code" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);">获取验证码</button>
+                                <button type="button" class="btn btn-outline-primary" id="get-email-code" data-local-captcha-trigger data-action="get-code" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; padding: 5px 10px;">获取验证码</button>
                             {% else %}
-                                <button type="button" class="btn btn-outline-primary" id="get-email-code" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%);">获取验证码</button>
+                                <button type="button" class="btn btn-outline-primary" id="get-email-code" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); font-size: 14px; padding: 5px 10px;">获取验证码</button>
                             {% endif %}
                         </div>
                         
-                        <div class="form-group">
+                        <div class="auth-form-group">
                             <input id="password1-field" 
                                    type="password" 
-                                   class="form-control {% if form.password1.errors %}is-invalid{% endif %}" 
+                                   class="auth-form-control {% if form.password1.errors %}is-invalid{% endif %}" 
                                    placeholder="密码" 
                                    name="{{ form.password1.html_name }}"
                                    required
                                    minlength="8">
-                            <span toggle="#password1-field" class="fa fa-fw fa-eye field-icon toggle-password"></span>
+                            <span toggle="#password1-field" class="fa fa-fw fa-eye auth-field-icon toggle-password"></span>
                             {% if form.password1.errors %}
-                                <div class="invalid-feedback">{{ form.password1.errors }}</div>
+                                <div class="auth-invalid-feedback">{{ form.password1.errors }}</div>
                             {% endif %}
-                            <div class="form-text text-secondary">至少8个字符</div>
+                            <div class="form-text" style="color: var(--login-on-surface-variant); font-size: 0.875em;">至少8个字符</div>
                         </div>
                         
-                        <div class="form-group">
+                        <div class="auth-form-group">
                             <input id="password2-field" 
                                    type="password" 
-                                   class="form-control {% if form.password2.errors %}is-invalid{% endif %}" 
+                                   class="auth-form-control {% if form.password2.errors %}is-invalid{% endif %}" 
                                    placeholder="确认密码" 
                                    name="{{ form.password2.html_name }}"
                                    required
                                    minlength="8">
-                            <span toggle="#password2-field" class="fa fa-fw fa-eye field-icon toggle-password"></span>
+                            <span toggle="#password2-field" class="fa fa-fw fa-eye auth-field-icon toggle-password"></span>
                             {% if form.password2.errors %}
-                                <div class="invalid-feedback">{{ form.password2.errors }}</div>
+                                <div class="auth-invalid-feedback">{{ form.password2.errors }}</div>
                             {% endif %}
                         </div>
 
-                        <div class="form-group">
-                            <label class="checkbox-wrap checkbox-primary">同意服务条款和隐私政策
+                        <div class="auth-form-group">
+                            <label class="checkbox-wrap checkbox-primary" style="color: var(--login-on-surface-variant);">同意服务条款和隐私政策
                                 <input type="checkbox" name="{{ form.agree_terms.html_name }}" required>
                                 <span class="checkmark"></span>
                             </label>
@@ -384,30 +149,30 @@
                         <input type="hidden" name="gen_time" id="gen_time_reg">
                         <input type="hidden" name="captcha_id" id="captcha_id_reg" value="{{ GEETEST_ID }}">
 
-                        <div class="form-group">
+                        <div class="auth-form-group">
                             <!-- 根据验证码提供商显示不同的注册按钮 -->
                             {% if CAPTCHA_PROVIDER == 'geetest' %}
-                                <button type="submit" class="form-control btn btn-primary submit px-3" data-geetest-trigger data-captcha-id="{{ GEETEST_ID }}">
+                                <button type="submit" class="auth-btn" data-geetest-trigger data-captcha-id="{{ GEETEST_ID }}">
                                     创建账户
                                 </button>
                             {% elif CAPTCHA_PROVIDER == 'turnstile' %}
-                                <button type="submit" class="form-control btn btn-primary submit px-3" data-turnstile-trigger data-turnstile-sitekey="{{ TURNSTILE_SITE_KEY }}">
+                                <button type="submit" class="auth-btn" data-turnstile-trigger data-turnstile-sitekey="{{ TURNSTILE_SITE_KEY }}">
                                     创建账户
                                 </button>
                             {% elif CAPTCHA_PROVIDER == 'local' %}
-                                <button type="button" class="form-control btn btn-primary submit px-3" data-local-captcha-trigger data-action="submit">
+                                <button type="button" class="auth-btn" data-local-captcha-trigger data-action="submit">
                                     创建账户
                                 </button>
                             {% else %}
-                                <button type="submit" class="form-control btn btn-primary submit px-3">
+                                <button type="submit" class="auth-btn">
                                     创建账户
                                 </button>
                             {% endif %}
                         </div>
                     </form>
                     
-                    <div class="switch-link">
-                        <p>已有账户？ <a href="{% url 'accounts:login' %}">立即登录</a></p>
+                    <div class="auth-switch-link">
+                        <p style="color: var(--login-on-surface-variant);">已有账户？ <a href="{% url 'accounts:login' %}">立即登录</a></p>
                     </div>
                 </div>
             </div>

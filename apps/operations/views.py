@@ -228,7 +228,7 @@ def account_opening_submit(request):
         return redirect('operations:account_opening_list')
     except Exception as e:
         logger.error(f'提交申请时发生错误: {str(e)}', exc_info=True)
-        messages.error(request, f'提交申请时发生错误: {str(e)}')
+        messages.error(request, '提交申请时发生错误，请稍后重试')
         return redirect('operations:account_opening_create')
 
 

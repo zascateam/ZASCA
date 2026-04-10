@@ -4,22 +4,9 @@
 from django.db.models.signals import post_save
 from django.dispatch import receiver
 from django.contrib.auth import get_user_model
-from .models import SystemStats, UserActivity
+from .models import UserActivity
 
 User = get_user_model()
-
-
-@receiver(post_save, sender=User)
-def update_user_stats(sender, instance, created, **kwargs):
-    """
-    用户创建或更新时更新用户统计
-    """
-    if created:
-        # 更新用户数量统计
-        SystemStats.objects.create(
-            stats_type='user_count',
-            stats_value=User.objects.count()
-        )
 
 
 @receiver(post_save, sender=UserActivity)

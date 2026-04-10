@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="zh-CN" {% if is_demo_mode %}data-demo-mode="true"{% endif %}>
+<html lang="zh-CN" {% if is_demo_mode %}data-demo-mode="true"{% endif %} data-theme="{{ theme_config.active_theme }}">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,16 +10,40 @@
     <link href="https://fonts.googleapis.com/css?family=Lato:300,400,700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
     <link href="https://cdnjs.cloudflare.com/ajax/libs/bootstrap/5.1.3/css/bootstrap.min.css" rel="stylesheet">
+    
+    <!-- 主题 CSS -->
+    <link rel="stylesheet" href="/static/css/themes/_variables.css">
+    <link rel="stylesheet" href="/static/{{ theme_css_url }}">
+    
     <link rel="stylesheet" href="/static/css/base.css">
     <link rel="stylesheet" href="/static/css/accounts.css">
 
     <!-- Favicon -->
     <link rel="icon" type="image/png" href="/static/img/favicon.png">
     
+    <!-- 自定义 CSS 变量 -->
+    {% if custom_css_vars %}
     <style>
+    {{ custom_css_vars|safe }}
+    </style>
+    {% endif %}
+    
+    <style>
+        :root {
+            --login-bg: var(--theme-background, #0a0a0f);
+            --login-surface: var(--theme-surface, #151520);
+            --login-surface-variant: var(--theme-surface-variant, #1a1a25);
+            --login-outline: var(--theme-outline-variant, #2a2a35);
+            --login-on-surface: var(--theme-on-surface, #ffffff);
+            --login-on-surface-variant: var(--theme-on-surface-variant, #a0a0b0);
+            --login-primary: var(--theme-primary, #00ff88);
+            --login-primary-hover: var(--theme-primary-hover, #00cc6a);
+            --login-shadow: var(--theme-shadow-lg, 0 20px 40px rgba(0, 0, 0, 0.3));
+        }
+
         body {
             font-family: 'Lato', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: #0a0a0f;
+            background: var(--login-bg);
             min-height: 100vh;
             display: flex;
             align-items: center;
@@ -28,20 +52,21 @@
             line-height: 1.6;
             overflow: hidden;
             margin: 0;
+            color: var(--login-on-surface);
         }
 
         .login-wrap {
             width: 100%;
             max-width: 400px;
-            background: #151520;
-            border-radius: 10px;
+            background: var(--login-surface);
+            border-radius: var(--theme-radius-lg, 10px);
             padding: 30px 40px;
             position: relative;
-            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.3);
+            box-shadow: var(--login-shadow);
         }
 
         .login-wrap h3 {
-            color: #fff;
+            color: var(--login-on-surface);
             margin-bottom: 30px;
             text-align: center;
             font-weight: 400;
@@ -54,47 +79,48 @@
 
         .form-control {
             height: 50px;
-            background: #1a1a25;
-            border: 1px solid #2a2a35;
-            border-radius: 5px;
-            color: #fff;
+            background: var(--login-surface-variant);
+            border: 1px solid var(--login-outline);
+            border-radius: var(--theme-radius-sm, 5px);
+            color: var(--login-on-surface);
             font-size: 16px;
             padding: 15px 20px 15px 20px;
+            transition: all 0.3s ease;
         }
 
         .form-control:focus {
-            border-color: #00ff88;
-            background: rgba(26, 26, 37, 0.8);
+            border-color: var(--login-primary);
+            background: var(--login-surface-variant);
             box-shadow: 0 0 0 3px rgba(0, 255, 136, 0.1);
         }
 
-        .form-control::-webkit-input-placeholder { color: #a0a0b0; }
-        .form-control::-moz-placeholder { color: #a0a0b0; }
-        .form-control:-ms-input-placeholder { color: #a0a0b0; }
-        .form-control:-moz-placeholder { color: #a0a0b0; }
+        .form-control::-webkit-input-placeholder { color: var(--login-on-surface-variant); }
+        .form-control::-moz-placeholder { color: var(--login-on-surface-variant); }
+        .form-control:-ms-input-placeholder { color: var(--login-on-surface-variant); }
+        .form-control:-moz-placeholder { color: var(--login-on-surface-variant); }
 
         .field-icon {
             position: absolute;
             right: 15px;
             top: 50%;
             transform: translateY(-50%);
-            color: #a0a0b0;
+            color: var(--login-on-surface-variant);
             cursor: pointer;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         .field-icon:hover {
-            color: #00ff88;
+            color: var(--login-primary);
         }
 
         .btn {
             height: 50px;
             line-height: 1.5;
-            border-radius: 5px;
+            border-radius: var(--theme-radius-sm, 5px);
             font-weight: 600;
-            background: linear-gradient(135deg, #00ff88, #0099ff);
+            background: linear-gradient(135deg, var(--login-primary), var(--theme-secondary, #0099ff));
             border: none;
-            color: #0a0a0f;
+            color: var(--theme-on-primary, #0a0a0f);
             font-size: 16px;
             font-weight: 600;
             cursor: pointer;
@@ -138,7 +164,7 @@
             padding-left: 25px;
             cursor: pointer;
             font-size: 14px;
-            color: #a0a0b0;
+            color: var(--login-on-surface-variant);
             -webkit-user-select: none;
             -moz-user-select: none;
             -ms-user-select: none;
@@ -160,17 +186,17 @@
             height: 18px;
             width: 18px;
             background-color: transparent;
-            border: 2px solid #2a2a35;
+            border: 2px solid var(--login-outline);
             border-radius: 3px;
         }
 
         .checkbox-wrap:hover input ~ .checkmark {
-            border-color: #00ff88;
+            border-color: var(--login-primary);
         }
 
         .checkbox-wrap input:checked ~ .checkmark {
-            background-color: #00ff88;
-            border-color: #00ff88;
+            background-color: var(--login-primary);
+            border-color: var(--login-primary);
         }
 
         .checkmark:after {
@@ -196,13 +222,13 @@
         }
 
         a {
-            color: #a0a0b0;
+            color: var(--login-on-surface-variant);
             text-decoration: none;
             transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         a:hover {
-            color: #00ff88;
+            color: var(--login-primary);
         }
 
         .switch-link {
@@ -210,22 +236,22 @@
             text-align: center;
             margin-top: 20px;
             padding-top: 20px;
-            border-top: 1px solid #2a2a35;
+            border-top: 1px solid var(--login-outline);
         }
 
         .switch-link a {
-            color: #00ff88;
+            color: var(--login-primary);
             font-weight: 500;
             text-decoration: none;
         }
 
         .switch-link a:hover {
-            color: #0099ff;
+            color: var(--theme-secondary, #0099ff);
             text-shadow: 0 0 10px rgba(0, 153, 255, 0.5);
         }
 
         .heading-section {
-            color: #fff;
+            color: var(--login-on-surface);
             margin-bottom: 20px;
         }
 
@@ -243,25 +269,50 @@
 
         .alert {
             padding: 1rem;
-            border-radius: 5px;
+            border-radius: var(--theme-radius-sm, 5px);
             margin-bottom: 1rem;
         }
 
         .alert-danger {
-            background: #3a0000;
-            border: 1px solid #ff0000;
-            color: #ff6666;
+            background: rgba(239, 68, 68, 0.1);
+            border: 1px solid var(--theme-error, #ef4444);
+            color: var(--theme-error, #ff6666);
         }
 
         .alert-success {
-            background: #003a00;
-            border: 1px solid #00aa00;
-            color: #66ff66;
+            background: rgba(16, 185, 129, 0.1);
+            border: 1px solid var(--theme-success, #10b981);
+            color: var(--theme-success, #66ff66);
         }
 
         .invalid-feedback {
-            color: #ff6666;
+            color: var(--theme-error, #ff6666);
             font-size: 0.875em;
+        }
+
+        /* 暗色模式适配 */
+        @media (prefers-color-scheme: dark) {
+            :root:not([data-theme]) {
+                --login-bg: #0a0a0f;
+                --login-surface: #151520;
+                --login-surface-variant: #1a1a25;
+                --login-outline: #2a2a35;
+                --login-on-surface: #ffffff;
+                --login-on-surface-variant: #a0a0b0;
+            }
+        }
+
+        /* 亮色模式适配 */
+        @media (prefers-color-scheme: light) {
+            :root:not([data-theme]) {
+                --login-bg: #f5f5f5;
+                --login-surface: #ffffff;
+                --login-surface-variant: #f0f0f0;
+                --login-outline: #e0e0e0;
+                --login-on-surface: #1a1a1a;
+                --login-on-surface-variant: #666666;
+                --login-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+            }
         }
     </style>
 </head>
@@ -359,7 +410,7 @@
                                 </label>
                             </div>
                             <div class="w-50 text-md-right">
-                                <a href="{% url 'accounts:forgot_password' %}" style="color: #fff">忘记密码？</a>
+                                <a href="{% url 'accounts:forgot_password' %}" style="color: var(--login-on-surface)">忘记密码？</a>
                             </div>
                         </div>
                         
@@ -426,14 +477,14 @@
                     // 禁用用户名和密码输入框（对于DEMO用户）
                     $('#username-field').prop('readonly', true);
                     $('#password-field').prop('readonly', true);
-                    $('#username-field').css('background-color', '#f5f5f5');
-                    $('#password-field').css('background-color', '#f5f5f5');
+                    $('#username-field').css('background-color', 'var(--login-surface-variant)');
+                    $('#password-field').css('background-color', 'var(--login-surface-variant)');
                 } else {
                     // 如果选择了默认选项，启用输入框并清空
                     $('#username-field').prop('readonly', false);
                     $('#password-field').prop('readonly', false);
-                    $('#username-field').css('background-color', '#1a1a25');
-                    $('#password-field').css('background-color', '#1a1a25');
+                    $('#username-field').css('background-color', '');
+                    $('#password-field').css('background-color', '');
                     $('#username-field').val('');
                     $('#password-field').val('');
                 }

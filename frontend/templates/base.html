@@ -5,6 +5,7 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta http-equiv="X-UA-Compatible" content="ie=edge">
+    <meta name="csrf-token" content="{{ csrf_token }}">
     <title>{% block title %}ZASCA{% endblock %}</title>
 
     <!-- CSS -->
@@ -15,7 +16,7 @@
     {% block extra_css %}{% endblock %}
 
     <!-- Favicon -->
-    <link rel="icon" type="image/png" href="/static/img/favicon.png">
+    <link rel="icon" type="image/svg+xml" href="/static/img/favicon.svg">
 </head>
 <body>
     <!-- 导航栏 -->

@@ -3,52 +3,8 @@
 """
 from django.db import models
 from django.contrib.auth import get_user_model
-from django.utils import timezone
 
 User = get_user_model()
-
-
-class SystemStats(models.Model):
-    """
-    系统统计模型
-    用于存储系统的各种统计数据
-    """
-    class Meta:
-        verbose_name = '系统统计'
-        verbose_name_plural = verbose_name
-        ordering = ['-created_at']
-        indexes = [
-            models.Index(fields=['stats_type']),
-            models.Index(fields=['created_at']),
-        ]
-
-    # 统计类型
-    STATS_TYPES = (
-        ('user_count', '用户数量'),
-        ('host_count', '主机数量'),
-        ('operation_count', '操作数量'),
-        ('active_host_count', '活跃主机数'),
-        ('error_count', '错误数量'),
-    )
-
-    stats_type = models.CharField(
-        '统计类型',
-        max_length=50,
-        choices=STATS_TYPES,
-        help_text='统计数据的类型'
-    )
-    stats_value = models.IntegerField(
-        '统计值',
-        help_text='统计数据的值'
-    )
-    created_at = models.DateTimeField(
-        '创建时间',
-        auto_now_add=True,
-        help_text='统计数据创建时间'
-    )
-
-    def __str__(self):
-        return f'{self.get_stats_type_display()}: {self.stats_value}'
 
 
 class DashboardWidget(models.Model):
@@ -167,13 +123,13 @@ class UserActivity(models.Model):
     )
 
     def __str__(self):
-        return f'{self.user.username} - {self.activity_type}'
+        return f'{self.user.username} - {self.activity_type}'  # type: ignore
 
 
 class SystemConfig(models.Model):
     """
     系统配置模型
-    
+
     用于存储系统的全局配置，如SMTP服务器、验证码服务等
     """
     # SMTP配置
@@ -215,7 +171,7 @@ class SystemConfig(models.Model):
         verbose_name='发件人邮箱',
         help_text='系统发送邮件时使用的发件人地址'
     )
-    
+
     # 统一的验证码配置 - 适用于Geetest和Turnstile
     captcha_id = models.CharField(
         max_length=255,
@@ -327,14 +283,32 @@ class SystemConfig(models.Model):
         verbose_name='站点名称',
         help_text='系统显示的站点名称'
     )
-    
+
     # 注册开关
     enable_registration = models.BooleanField(
         default=False,
         verbose_name='启用用户注册',
         help_text='是否开启用户注册功能，默认为关闭'
     )
-    
+
+    # ICP备案号配置
+    icp_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name='ICP备案号',
+        help_text='ICP备案号，例如：京ICP备12345678号'
+    )
+
+    # 公安备案号配置
+    police_number = models.CharField(
+        max_length=100,
+        blank=True,
+        null=True,
+        verbose_name='公安备案号',
+        help_text='公安备案号，例如：京公网安备 11010502000000号'
+    )
+
     # 邮箱后缀配置
     EMAIL_SUFFIX_MODE_CHOICES = (
         ('allow_all', '全部允许'),
@@ -352,9 +326,18 @@ class SystemConfig(models.Model):
         blank=True,
         null=True,
         verbose_name='邮箱后缀列表',
-        help_text='允许或禁止的邮箱后缀列表，每行一个后缀，例如：\n@example.com\n@gmail.com\n@company.com'
+        help_text=(
+            '允许或禁止的邮箱后缀列表，每行一个后缀，'
+            '例如：\n@example.com\n@gmail.com\n@company.com'
+        )
     )
-    
+
+    local_access_locked = models.BooleanField(
+        default=False,
+        verbose_name='禁止本地访问',
+        help_text='启用后将禁止来自 localhost/127.0.0.1 的访问'
+    )
+
     created_at = models.DateTimeField(
         auto_now_add=True,
         verbose_name='创建时间'
@@ -367,12 +350,14 @@ class SystemConfig(models.Model):
     class Meta:
         verbose_name = '系统配置'
         verbose_name_plural = '系统配置'
-    
+
     def __str__(self):
         return f'{self.site_name} 配置'
 
     def clean(self):
-        """Model-level validation: Validate that when a provider is enabled, its required keys are present.
+        """
+        Model-level validation: Validate that when a provider is enabled,
+        its required keys are present.
         """
         from django.core.exceptions import ValidationError
 
@@ -381,8 +366,12 @@ class SystemConfig(models.Model):
         provider = getattr(self, 'captcha_provider', 'none')
         if provider in ['geetest', 'turnstile']:
             if not (self.captcha_id and self.captcha_key):
-                errors['captcha_id'] = f'启用 {self.get_captcha_provider_display()} 时必须填写验证码 ID 和密钥。'
-                errors['captcha_key'] = f'启用 {self.get_captcha_provider_display()} 时必须填写验证码 ID 和密钥。'
+                msg = (
+                    f'启用 {self.get_captcha_provider_display()} 时 '
+                    f'必须填写验证码 ID 和密钥。'
+                )
+                errors['captcha_id'] = msg
+                errors['captcha_key'] = msg
         elif provider == 'local':
             # local provider requires no external keys
             pass
@@ -398,7 +387,7 @@ class SystemConfig(models.Model):
         """获取当前系统配置"""
         config, created = cls.objects.get_or_create(pk=1)
         return config
-        
+
     def get_captcha_config(self, scene=None):
         """
         获取指定场景的验证码配置，如果没有为场景单独配置，则使用全局配置

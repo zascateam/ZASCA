@@ -55,12 +55,14 @@ INSTALLED_APPS = [
     'apps.bootstrap',  # 主机引导系统
     'apps.audit',
     'apps.tasks',
+    'apps.themes',  # 主题系统
     'plugins',
 ]
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'config.maintenance_middleware.MaintenanceModeMiddleware',  # 维护模式中间件
+    'config.local_lock_middleware.LocalLockMiddleware',  # 本地访问限制中间件
     'django.contrib.sessions.middleware.SessionMiddleware',
     'corsheaders.middleware.CorsMiddleware',
     'django.middleware.common.CommonMiddleware',
@@ -85,6 +87,7 @@ TEMPLATES = [
                 'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
+                'apps.dashboard.context_processors.system_config',
             ],
         },
     },
@@ -164,7 +167,9 @@ REST_FRAMEWORK = {
 }
 
 # CORS settings
-CORS_ALLOW_ALL_ORIGINS = DEBUG
+CORS_ALLOW_ALL_ORIGINS = os.environ.get(
+    'CORS_ALLOW_ALL_ORIGINS', 'True' if DEBUG else 'False'
+).lower() == 'true'
 
 
 # Winrm settings
@@ -218,7 +223,16 @@ LOGGING = {
 # 安全配置
 SECURE_BROWSER_XSS_FILTER = True
 SECURE_CONTENT_TYPE_NOSNIFF = True
-X_FRAME_OPTIONS = 'DENY'  # 防止点击劫持
+X_FRAME_OPTIONS = 'DENY'
+SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
+
+SESSION_COOKIE_SECURE = os.environ.get(
+    'SESSION_COOKIE_SECURE', 'True' if not DEBUG else 'False'
+).lower() == 'true'
+CSRF_COOKIE_SECURE = os.environ.get(
+    'CSRF_COOKIE_SECURE', 'True' if not DEBUG else 'False'
+).lower() == 'true'
+SESSION_COOKIE_HTTPONLY = True
 
 # HTTPS相关安全配置 (仅在生产环境中启用)
 if not DEBUG:
@@ -270,8 +284,13 @@ if os.environ.get('ZASCA_DEMO', '').lower() == '1':
         }
     }
     
-    # 禁用密码验证器以允许简单密码
-    AUTH_PASSWORD_VALIDATORS = []
+    # DEMO模式保留最小长度验证，仅放宽复杂度要求
+    AUTH_PASSWORD_VALIDATORS = [
+        {
+            'NAME': 'django.contrib.auth.password_validation.MinimumLengthValidator',
+            'OPTIONS': {'min_length': 4},
+        },
+    ]
     
     # 允许所有主机
     ALLOWED_HOSTS = ['*']
@@ -279,8 +298,11 @@ if os.environ.get('ZASCA_DEMO', '').lower() == '1':
     # DEBUG模式开启
     DEBUG = True
     
-    # 设置固定密钥
-    SECRET_KEY = 'demo-mode-secret-key-for-testing-purposes-only'
+    # 生成随机SECRET_KEY（每次启动不同）
+    import secrets as _secrets
+    SECRET_KEY = _secrets.token_urlsafe(50)
+    import logging as _logging
+    _logging.getLogger('zasca').warning('DEMO模式: 使用随机生成的SECRET_KEY，重启后所有session将失效')
 
 # DEMO模式启动消息
 if os.environ.get('ZASCA_DEMO', '').lower() == '1':
@@ -291,4 +313,4 @@ if os.environ.get('ZASCA_DEMO', '').lower() == '1':
 os.makedirs(BASE_DIR / 'logs', exist_ok=True)
 
 # Bootstrap认证配置
-BOOTSTRAP_SHARED_SALT = os.environ.get('BOOTSTRAP_SHARED_SALT', 'MY_SECRET_2024')
+BOOTSTRAP_SHARED_SALT = os.environ.get('BOOTSTRAP_SHARED_SALT', '')

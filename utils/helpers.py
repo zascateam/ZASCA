@@ -11,21 +11,11 @@ from django.conf import settings
 
 
 def get_client_ip(request) -> Optional[str]:
-    """
-    获取客户端IP地址
-
-    Args:
-        request: Django请求对象
-
-    Returns:
-        str: 客户端IP地址，如果无法获取则返回None
-    """
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0].strip()
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
+    if getattr(settings, 'USE_X_FORWARDED_FOR', False):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR')
 
 
 def validate_ip_address(ip: str) -> bool:
@@ -218,7 +208,7 @@ def generate_random_string(length: int = 32,
     Returns:
         str: 生成的随机字符串
     """
-    import random
+    import secrets as _secrets
     import string
 
     chars = ''
@@ -234,7 +224,7 @@ def generate_random_string(length: int = 32,
     if not chars:
         chars = string.ascii_letters + string.digits
 
-    return ''.join(random.choice(chars) for _ in range(length))
+    return ''.join(_secrets.choice(chars) for _ in range(length))
 
 
 def validate_email(email: str) -> bool:
@@ -391,7 +381,7 @@ def sanitize_filename(filename: str) -> str:
         str: 清理后的文件名
     """
     # 移除路径分隔符和其他危险字符
-    unsafe_chars = ['/', '\', ':', '*', '?', '"', '<', '>', '|', ' ']
+    unsafe_chars = ['/', '\\', ':', '*', '?', '"', '<', '>', '|', '\x00']
     for char in unsafe_chars:
         filename = filename.replace(char, '_')
 

@@ -286,9 +286,9 @@ class LocalCaptchaAdapter {
      * 获取CSRF令牌
      */
     getCsrfToken() {
-        return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-               document.querySelector('[name=csrf-token]')?.value ||
-               document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1];
+        return window.getCsrfToken ? window.getCsrfToken() :
+               (document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
+                document.cookie.split('; ').find(row => row.startsWith('csrftoken='))?.split('=')[1] || '');
     }
 
     /**
@@ -496,7 +496,7 @@ function sendEmailCodeRequest(button) {
         method: 'POST',
         body: formData,
         headers: {
-            'X-CSRFToken': document.querySelector('[name=csrfmiddlewaretoken]')?.value
+            'X-CSRFToken': window.getCsrfToken ? window.getCsrfToken() : (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '')
         }
     })
     .then(response => response.json())

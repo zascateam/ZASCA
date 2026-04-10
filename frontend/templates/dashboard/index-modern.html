@@ -285,42 +285,61 @@
             </div>
             <div class="card-body p-0">
                 <div class="p-3">
-                    {% if products %}
-                        <div class="row g-3">
-                            {% for product in products %}
-                            <div class="col-md-6">
-                                <div class="{{ product|cycle:'card-gradient-1':'card-gradient-2':'card-gradient-3':'card-gradient-4' }} text-white p-4 rounded-4">
-                                    <div class="d-flex justify-content-between align-items-start mb-3">
-                                        <h6 class="fw-bold">{{ product.name }}</h6>
-                                        <span class="badge bg-white text-dark fs-7">{{ product.get_os_type_display }}</span>
-                                    </div>
-                                    <p class="small mb-3">{{ product.description|truncatechars:100 }}</p>
-                                    <div class="row g-2 mb-3">
-                                        <div class="col-6">
-                                            <small class="text-white-50 d-block">配置</small>
-                                            <span class="fs-6">{{ product.cpu_cores }}核{{ product.memory_gb }}G</span>
+                    {% if grouped_products %}
+                        {% for group_data in grouped_products %}
+                            {% if group_data.group %}
+                                <div class="mb-4">
+                                    <h6 class="fw-bold text-primary mb-3">
+                                        <i class="bi bi-folder me-2"></i>{{ group_data.group.name }}
+                                    </h6>
+                                    {% if group_data.group.description %}
+                                        <p class="text-muted small mb-3">{{ group_data.group.description }}</p>
+                                    {% endif %}
+                                </div>
+                            {% else %}
+                                <div class="mb-4">
+                                    <h6 class="fw-bold text-primary mb-3">
+                                        <i class="bi bi-widgets me-2"></i>其他产品
+                                    </h6>
+                                </div>
+                            {% endif %}
+                            
+                            <div class="row g-3 mb-4">
+                                {% for product in group_data.products %}
+                                <div class="col-md-6">
+                                    <div class="{{ product|cycle:'card-gradient-1':'card-gradient-2':'card-gradient-3':'card-gradient-4' }} text-white p-4 rounded-4">
+                                        <div class="d-flex justify-content-between align-items-start mb-3">
+                                            <h6 class="fw-bold">{{ product.name }}</h6>
+                                            <span class="badge bg-white text-dark fs-7">{{ product.get_os_type_display }}</span>
                                         </div>
-                                        <div class="col-6">
-                                            <small class="text-white-50 d-block">状态</small>
-                                            <span class="fs-6">{{ product.get_status_display }}</span>
+                                        <p class="small mb-3">{{ product.description|truncatechars:100 }}</p>
+                                        <div class="row g-2 mb-3">
+                                            <div class="col-6">
+                                                <small class="text-white-50 d-block">配置</small>
+                                                <span class="fs-6">{{ product.cpu_cores }}核{{ product.memory_gb }}G</span>
+                                            </div>
+                                            <div class="col-6">
+                                                <small class="text-white-50 d-block">状态</small>
+                                                <span class="fs-6">{{ product.get_status_display }}</span>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <div class="d-flex gap-2">
-                                        {% if product.is_available %}
-                                            <a href="{% url 'operations:account_opening_create' %}?product={{ product.id }}"
-                                               class="btn btn-light btn-sm px-3 me-2">
-                                                申请使用
+                                        <div class="d-flex gap-2">
+                                            {% if product.is_available %}
+                                                <a href="{% url 'operations:account_opening_create' %}?product={{ product.id }}"
+                                                   class="btn btn-light btn-sm px-3 me-2">
+                                                    申请使用
+                                                </a>
+                                            {% endif %}
+                                            <a href="{% url 'dashboard:product_detail' product.id %}"
+                                               class="btn btn-outline-light btn-sm">
+                                                详情
                                             </a>
-                                        {% endif %}
-                                        <a href="{% url 'dashboard:product_detail' product.id %}"
-                                           class="btn btn-outline-light btn-sm">
-                                            详情
-                                        </a>
+                                        </div>
                                     </div>
                                 </div>
+                                {% endfor %}
                             </div>
-                            {% endfor %}
-                        </div>
+                        {% endfor %}
                     {% else %}
                         <div class="text-center py-5">
                             <i class="bi bi-inbox display-1 text-muted opacity-25"></i>

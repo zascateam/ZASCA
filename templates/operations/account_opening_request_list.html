@@ -199,7 +199,7 @@
 
 /* 下拉框悬停状态 */
 .md-input-wrapper--filled select.md-input:hover {
-    background-color: var(--md-sys-color-surface);
+    background-color: rgba(var(--primary-color-rgb), 0.04);
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
 }
 
@@ -408,6 +408,30 @@
     margin: 0 1rem;
     color: var(--md-sys-color-on-surface-variant);
     font-size: var(--md-sys-typescale-body-medium-font-size);
+}
+
+/* 深色模式适配 */
+[data-theme="dark"] .md-input-wrapper--filled {
+    background-color: var(--md-sys-color-surface-variant);
+}
+
+[data-theme="dark"] .md-input-wrapper--filled select.md-input:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+}
+
+[data-theme="dark"] .md-input-wrapper--filled select.md-input:focus {
+    background-color: var(--md-sys-color-surface);
+    border-bottom: 2px solid var(--md-sys-color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .md-input-wrapper--filled select.md-input option {
+    background: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+}
+
+[data-theme="dark"] .list-table tr:hover {
+    background: rgba(var(--primary-color-rgb), 0.08);
 }
 }
 

@@ -404,6 +404,9 @@ const Profile = {
 
             const response = await fetch(window.location.href, {
                 method: 'POST',
+                headers: {
+                    'X-CSRFToken': getCsrfToken(),
+                },
                 body: formData
             });
 

@@ -48,6 +48,15 @@ class Host(models.Model):
         related_name='managed_hosts'
     )
     
+    # 管理提供商 - 由超级管理员分配
+    providers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        verbose_name='管理提供商',
+        related_name='provider_hosts',
+        help_text='由超级管理员分配的提供商用户，提供商可以管理此主机'
+    )
+    
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 
@@ -61,26 +70,26 @@ class Host(models.Model):
 
     @property
     def password(self):
-        """
-        获取解密后的密码
-        注意：此属性不应在模板或日志中直接使用
-        """
-        from django.core.signing import Signer
-        signer = Signer()
+        from cryptography.fernet import Fernet
+        import base64
+        import hashlib
+        from django.conf import settings
+        key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+        f = Fernet(base64.urlsafe_b64encode(key))
         try:
-            return signer.unsign(self._password)
-        except:
-            # 如果解密失败，说明可能是未加密的旧数据
-            return self._password
+            return f.decrypt(self._password.encode()).decode()
+        except Exception:
+            raise ValueError("密码解密失败，数据可能已损坏或密钥已变更")
 
     @password.setter
     def password(self, raw_password):
-        """
-        设置并加密密码
-        """
-        from django.core.signing import Signer
-        signer = Signer()
-        self._password = signer.sign(raw_password)
+        from cryptography.fernet import Fernet
+        import base64
+        import hashlib
+        from django.conf import settings
+        key = hashlib.sha256(settings.SECRET_KEY.encode()).digest()
+        f = Fernet(base64.urlsafe_b64encode(key))
+        self._password = f.encrypt(raw_password.encode()).decode()
 
     def save(self, *args, **kwargs):
         """
@@ -164,6 +173,22 @@ class HostGroup(models.Model):
     name = models.CharField(max_length=100, verbose_name='组名称')
     description = models.TextField(blank=True, verbose_name='描述')
     hosts = models.ManyToManyField(Host, blank=True, verbose_name='主机')
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        verbose_name='创建者',
+        related_name='created_hostgroups'
+    )
+    # 管理提供商 - 由超级管理员分配
+    providers = models.ManyToManyField(
+        settings.AUTH_USER_MODEL,
+        blank=True,
+        verbose_name='管理提供商',
+        related_name='provider_hostgroups',
+        help_text='由超级管理员分配的提供商用户，提供商可以管理此主机组'
+    )
     created_at = models.DateTimeField(auto_now_add=True, verbose_name='创建时间')
     updated_at = models.DateTimeField(auto_now=True, verbose_name='更新时间')
 

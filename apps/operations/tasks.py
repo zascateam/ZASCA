@@ -3,18 +3,28 @@ from django.contrib.auth.models import User
 from apps.operations.models import AccountOpeningRequest, CloudComputerUser
 from apps.hosts.models import Host
 from apps.tasks.models import AsyncTask
-from apps.certificates.models import ClientCertificate
+from apps.tasks.models import TaskProgress
 import logging
-import winrm
-import random
+import secrets
 import string
 
 logger = logging.getLogger(__name__)
 
 
+def generate_secure_password(length=16):
+    alphabet = string.ascii_letters + string.digits + "!@#$%^&*()_+-=[]{}|;:,.<>?"
+    while True:
+        password = ''.join(secrets.choice(alphabet) for _ in range(length))
+        has_upper = any(c.isupper() for c in password)
+        has_lower = any(c.islower() for c in password)
+        has_digit = any(c.isdigit() for c in password)
+        has_special = any(c in '!@#$%^&*()_+-=[]{}|;:,.<>?' for c in password)
+        if has_upper and has_lower and has_digit and has_special:
+            return password
+
+
 @shared_task(bind=True)
 def process_opening_request(self, request_id, operator_id):
-    """异步处理开户请求"""
     task = AsyncTask.objects.create(
         task_id=self.request.id,
         name=f"处理开户请求 #{request_id}",
@@ -28,22 +38,18 @@ def process_opening_request(self, request_id, operator_id):
         request_obj = AccountOpeningRequest.objects.get(id=request_id)
         task.start_execution()
         
-        # 更新进度
         task.progress = 10
         task.save()
         
-        # 记录进度
-        from apps.tasks.models import TaskProgress
         TaskProgress.objects.create(
             task=task,
             progress=10,
             message="开始处理开户请求"
         )
         
-        # 选择合适的主机
         available_host = Host.objects.filter(
             is_active=True,
-            init_status='ready'  # 确保主机已准备好
+            init_status='ready'
         ).first()
         
         if not available_host:
@@ -58,26 +64,10 @@ def process_opening_request(self, request_id, operator_id):
             message="找到可用主机"
         )
         
-        # 创建Windows用户
-        from utils.winrm_client import SecureWinRMClient
+        from utils.winrm_client import WinrmClient
         
-        # 生成用户名和密码
         username = request_obj.username
-        password = request_obj.generate_temp_password()  # 使用模型方法生成密码
-        
-        # 使用WinRM创建用户
-        ps_command = f"""
-        $securePassword = ConvertTo-SecureString "{password}" -AsPlainText -Force
-        $userExists = Get-LocalUser -Name "{username}" -ErrorAction SilentlyContinue
-        if ($userExists) {{
-            Write-Output "User {username} already exists, updating password..."
-            Set-LocalUser -Name "{username}" -Password $securePassword
-        }} else {{
-            New-LocalUser -Name "{username}" -Password $securePassword -FullName "{getattr(request_obj, 'full_name', username)}" -Description "Cloud computer user"
-            Add-LocalGroupMember -Group "Remote Desktop Users" -Member "{username}"
-        }}
-        Write-Output "User {username} created/updated successfully"
-        """
+        password = generate_secure_password()
         
         task.progress = 50
         task.save()
@@ -88,13 +78,22 @@ def process_opening_request(self, request_id, operator_id):
             message="执行PowerShell命令创建用户"
         )
         
-        # 连接到主机并执行命令
-        client = SecureWinRMClient(available_host)
-        session = client.connect_with_certificate()
-        result = session.run_ps(ps_command)
+        client = WinrmClient(
+            hostname=available_host.hostname,
+            port=available_host.port,
+            username=available_host.username,
+            password=available_host.password,
+            use_ssl=available_host.use_ssl
+        )
+        
+        result = client.create_user(
+            username=username,
+            password=password,
+            description=getattr(request_obj, 'user_description', 'Cloud computer user')
+        )
         
         if result.status_code != 0:
-            error_msg = result.std_err.decode('utf-8') if result.std_err else 'Unknown error'
+            error_msg = result.std_err if result.std_err else 'Unknown error'
             raise Exception(f"创建用户失败: {error_msg}")
         
         task.progress = 70
@@ -106,14 +105,12 @@ def process_opening_request(self, request_id, operator_id):
             message="用户创建成功"
         )
         
-        # 关联用户到主机
         request_obj.host = available_host
         request_obj.windows_username = username
-        request_obj.windows_password = password  # 应该加密存储
+        request_obj.windows_password = password
         request_obj.status = 'approved'
         request_obj.save()
         
-        # 创建CloudComputerUser记录
         cloud_user, created = CloudComputerUser.objects.get_or_create(
             account_opening_request=request_obj,
             defaults={
@@ -162,7 +159,6 @@ def process_opening_request(self, request_id, operator_id):
         logger.error(f"处理开户请求失败: {str(e)}", exc_info=True)
         task.complete_failure(str(e))
         
-        # 如果部分操作已完成，可能需要回滚
         try:
             rollback_opening_request(request_id)
         except Exception as rollback_error:
@@ -175,23 +171,25 @@ def process_opening_request(self, request_id, operator_id):
 
 
 def rollback_opening_request(request_id):
-    """回滚已执行的操作"""
     try:
         request_obj = AccountOpeningRequest.objects.get(id=request_id)
         if request_obj.host and request_obj.windows_username:
-            # 通过WinRM删除已创建的用户
-            from utils.winrm_client import SecureWinRMClient
-            client = SecureWinRMClient(request_obj.host)
+            from utils.winrm_client import WinrmClient
+            client = WinrmClient(
+                hostname=request_obj.host.hostname,
+                port=request_obj.host.port,
+                username=request_obj.host.username,
+                password=request_obj.host.password,
+                use_ssl=request_obj.host.use_ssl
+            )
             
-            ps_command = f'Disable-LocalUser -Name "{request_obj.windows_username}" -ErrorAction SilentlyContinue'
-            result = client.connect_with_certificate().run_ps(ps_command)
+            result = client.disabled_user(request_obj.windows_username)
             
             if result.status_code == 0:
                 logger.info(f"已禁用用户 {request_obj.windows_username}")
             else:
-                logger.warning(f"禁用用户失败: {result.std_err.decode('utf-8')}")
+                logger.warning(f"禁用用户失败: {result.std_err}")
         
-        # 重置请求状态
         request_obj.status = 'pending'
         request_obj.save()
         
@@ -201,7 +199,6 @@ def rollback_opening_request(request_id):
 
 @shared_task(bind=True)
 def reset_user_password(self, user_id, operator_id):
-    """异步重置用户密码"""
     task = AsyncTask.objects.create(
         task_id=self.request.id,
         name=f"重置用户密码 - 用户 #{user_id}",
@@ -215,28 +212,26 @@ def reset_user_password(self, user_id, operator_id):
         user = CloudComputerUser.objects.get(id=user_id)
         task.start_execution()
         
-        # 生成新密码
         new_password = generate_secure_password()
         
-        # 通过WinRM重置密码
-        from utils.winrm_client import SecureWinRMClient
-        client = SecureWinRMClient(user.host)
+        from utils.winrm_client import WinrmClient
+        client = WinrmClient(
+            hostname=user.host.hostname,
+            port=user.host.port,
+            username=user.host.username,
+            password=user.host.password,
+            use_ssl=user.host.use_ssl
+        )
         
-        ps_command = f"""
-        $securePassword = ConvertTo-SecureString "{new_password}" -AsPlainText -Force
-        Set-LocalUser -Name "{user.windows_username}" -Password $securePassword
-        Write-Output "Password reset for user {user.windows_username}"
-        """
-        
-        result = client.connect_with_certificate().run_ps(ps_command)
+        result = client.reset_password(user.windows_username, new_password)
         
         if result.status_code != 0:
-            error_msg = result.std_err.decode('utf-8') if result.std_err else 'Unknown error'
+            error_msg = result.std_err if result.std_err else 'Unknown error'
             raise Exception(f"重置密码失败: {error_msg}")
         
-        # 更新数据库中的密码（应该加密存储）
-        user.account_opening_request.windows_password = new_password
-        user.account_opening_request.save()
+        if hasattr(user, 'account_opening_request') and user.account_opening_request:
+            user.account_opening_request.windows_password = new_password
+            user.account_opening_request.save()
         
         task.progress = 100
         task.complete_success({
@@ -261,16 +256,8 @@ def reset_user_password(self, user_id, operator_id):
         }
 
 
-def generate_secure_password(length=12):
-    """生成安全密码"""
-    characters = string.ascii_letters + string.digits + "!@#$%^&*"
-    password = ''.join(random.choice(characters) for i in range(length))
-    return password
-
-
 @shared_task(bind=True)
 def batch_process_opening_requests(self, request_ids, operator_id):
-    """批量处理开户请求"""
     task = AsyncTask.objects.create(
         task_id=self.request.id,
         name=f"批量处理开户请求 ({len(request_ids)}个)",
@@ -292,12 +279,10 @@ def batch_process_opening_requests(self, request_ids, operator_id):
         
         for idx, request_id in enumerate(request_ids):
             try:
-                # 更新进度
-                progress = int((idx / total_requests) * 80) + 10  # 10% 到 90%
+                progress = int((idx / total_requests) * 80) + 10
                 task.progress = progress
                 task.save()
                 
-                # 处理单个请求
                 result = process_opening_request.delay(request_id, operator_id).get()
                 
                 results['processed'] += 1
@@ -334,7 +319,6 @@ def batch_process_opening_requests(self, request_ids, operator_id):
 
 @shared_task(bind=True)
 def cleanup_inactive_users(self, days_inactive=30):
-    """清理非活跃用户"""
     task = AsyncTask.objects.create(
         task_id=self.request.id,
         name=f"清理非活跃用户 (超过{days_inactive}天未使用)",
@@ -356,19 +340,23 @@ def cleanup_inactive_users(self, days_inactive=30):
         
         cleaned_count = 0
         for user in inactive_users:
-            # 禁用用户账户
-            from utils.winrm_client import SecureWinRMClient
-            client = SecureWinRMClient(user.host)
+            from utils.winrm_client import WinrmClient
+            client = WinrmClient(
+                hostname=user.host.hostname,
+                port=user.host.port,
+                username=user.host.username,
+                password=user.host.password,
+                use_ssl=user.host.use_ssl
+            )
             
-            ps_command = f'Disable-LocalUser -Name "{user.windows_username}"'
-            result = client.connect_with_certificate().run_ps(ps_command)
+            result = client.disabled_user(user.windows_username)
             
             if result.status_code == 0:
                 user.status = 'disabled'
                 user.save()
                 cleaned_count += 1
             else:
-                logger.warning(f"无法禁用用户 {user.windows_username}: {result.std_err.decode('utf-8')}")
+                logger.warning(f"无法禁用用户 {user.windows_username}: {result.std_err}")
         
         task.progress = 100
         task.complete_success({

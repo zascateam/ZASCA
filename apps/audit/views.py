@@ -1,7 +1,6 @@
 from django.http import JsonResponse
-from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.utils.decorators import method_decorator
 from django.views import View
 from .models import AuditLog, SensitiveOperation, SecurityEvent, SessionActivity
@@ -266,7 +265,7 @@ def get_security_events(request):
         }, status=500)
 
 
-@csrf_exempt
+@login_required
 @require_http_methods(["POST"])
 def mark_security_event_resolved(request):
     """标记安全事件为已解决"""

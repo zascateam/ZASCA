@@ -5,6 +5,7 @@ from functools import wraps
 from django.core.cache import cache
 from django.http import JsonResponse
 from django.conf import settings
+from utils.helpers import get_client_ip
 import time
 
 
@@ -61,16 +62,6 @@ def rate_limit(key_func, rate='5/m'):
             return view_func(request, *args, **kwargs)
         return wrapper
     return decorator
-
-
-def get_client_ip(request):
-    """获取客户端IP地址"""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
 
 
 def get_rate_limit_key(request, prefix=''):

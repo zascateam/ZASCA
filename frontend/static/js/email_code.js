@@ -52,21 +52,12 @@
         // CAPTCHA_PROVIDER is injected in template context as CAPTCHA_PROVIDER
         var provider = window.CAPTCHA_PROVIDER || document.body.getAttribute('data-captcha-provider') || 'none';
 
-        function getCsrfToken() {
-            // Try multiple methods to get CSRF token
-            return document.querySelector('[name=csrfmiddlewaretoken]')?.value ||
-                   document.querySelector('[name="csrf-token"]')?.getAttribute('content') ||
-                   document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') ||
-                   window.Config?.csrfToken ||
-                   '';
-        }
-
         function postCode(payload, buttonRef){
             fetch(endpoint, {
                 method: 'POST',
                 credentials: 'same-origin',
                 headers: {
-                    'X-CSRFToken': getCsrfToken() || document.querySelector('[name=csrfmiddlewaretoken]')?.value || ''
+                    'X-CSRFToken': window.getCsrfToken ? window.getCsrfToken() : (document.querySelector('[name=csrfmiddlewaretoken]')?.value || '')
                 },
                 body: payload
             }).then(function(resp){

@@ -2,6 +2,7 @@ from functools import wraps
 from .models import AuditLog, SensitiveOperation, SecurityEvent
 from django.contrib.auth.models import User
 from apps.hosts.models import Host
+from utils.helpers import get_client_ip
 import json
 import logging
 from django.http import JsonResponse
@@ -66,8 +67,6 @@ def audit_log(action, host_param=None, details_extractor=None, related_object_pa
                             'method': request.method,
                             'path': request.path,
                             'user_agent': request.META.get('HTTP_USER_AGENT', ''),
-                            'view_args': args,
-                            'view_kwargs': kwargs
                         }
                     
                     AuditLog.objects.create(
@@ -87,16 +86,6 @@ def audit_log(action, host_param=None, details_extractor=None, related_object_pa
             return response
         return wrapper
     return decorator
-
-
-def get_client_ip(request):
-    """获取客户端真实IP"""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0]
-    else:
-        ip = request.META.get('REMOTE_ADDR')
-    return ip
 
 
 def log_sensitive_operation(operation_type, justification_required=True, response_on_missing_justification=None):

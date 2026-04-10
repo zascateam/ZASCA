@@ -1,8 +1,10 @@
 /**
- * 用户账户样式 - 霓虹风格
+ * 用户账户样式 - 高级霓虹赛博朋克风格
+ * 版本: 2.0 - 增强视觉品质和交互体验
  */
 
-/* 霓虹风格背景 */
+/* ==================== 基础布局与背景系统 ==================== */
+
 html, body {
     margin: 0;
     padding: 0;
@@ -10,17 +12,21 @@ html, body {
     width: 100%;
     height: 100%;
     min-height: 100vh;
-    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-    background: linear-gradient(45deg, #0f0c29, #302b63, #24243e);
+    font-family: 'Inter', 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 25%, #16213e 50%, #0f3460 75%, #1a1a3e 100%);
+    background-size: 400% 400%;
     display: flex;
     align-items: center;
     justify-content: center;
     color: #fff;
+    position: relative;
 }
 
 body.login-page, body.register-page {
     min-height: 100vh;
-    background: linear-gradient(45deg, #0f0c29, #302b63, #24243e);
+    background: linear-gradient(135deg, #0a0a1a 0%, #1a1a3e 25%, #16213e 50%, #0f3460 75%, #1a1a3e 100%);
+    background-size: 400% 400%;
+    animation: gradientShift 15s ease infinite;
     display: flex;
     align-items: center;
     justify-content: center;
@@ -32,74 +38,172 @@ body.login-page, body.register-page {
     min-width: 100vw;
 }
 
-/* 添加光晕效果 */
-body.login-page::before, body.register-page::before {
+@keyframes gradientShift {
+    0% { background-position: 0% 50%; }
+    25% { background-position: 100% 0%; }
+    50% { background-position: 100% 100%; }
+    75% { background-position: 0% 100%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* 动态光晕背景 */
+body.login-page::before,
+body.register-page::before {
     content: '';
-    position: absolute;
+    position: fixed;
+    top: -50%;
+    left: -50%;
+    width: 200%;
+    height: 200%;
+    background: 
+        radial-gradient(circle at 20% 30%, rgba(99, 102, 241, 0.12) 0%, transparent 40%),
+        radial-gradient(circle at 80% 70%, rgba(6, 182, 212, 0.10) 0%, transparent 40%),
+        radial-gradient(circle at 40% 80%, rgba(236, 72, 153, 0.08) 0%, transparent 35%),
+        radial-gradient(circle at 60% 20%, rgba(16, 185, 129, 0.06) 0%, transparent 35%);
+    animation: auroraMove 20s ease-in-out infinite;
+    z-index: 0;
+    pointer-events: none;
+}
+
+@keyframes auroraMove {
+    0%, 100% { transform: translate(0, 0) rotate(0deg); }
+    33% { transform: translate(30px, -30px) rotate(5deg); }
+    66% { transform: translate(-20px, 20px) rotate(-5deg); }
+}
+
+/* 网格背景 */
+body.login-page::after,
+body.register-page::after {
+    content: '';
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background: radial-gradient(ellipse at center, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
-    z-index: -1;
+    background-image: 
+        linear-gradient(rgba(99, 102, 241, 0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(99, 102, 241, 0.03) 1px, transparent 1px);
+    background-size: 60px 60px;
+    z-index: 0;
     pointer-events: none;
 }
 
-@keyframes gradientBG {
-    0% { background-position: 0% 50%; }
-    50% { background-position: 100% 50%; }
-    100% { background-position: 0% 50%; }
-}
+/* ==================== 背景装饰元素系统 ==================== */
 
-/* 背景装饰元素 */
 .background-decor {
-    position: absolute;
+    position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
     z-index: 0;
+    pointer-events: none;
 }
 
 .bg-circle {
     position: absolute;
     border-radius: 50%;
-    background: radial-gradient(circle, rgba(99, 102, 241, 0.1) 0%, transparent 70%);
-    animation: float 8s infinite ease-in-out;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.15) 0%, transparent 70%);
+    filter: blur(40px);
+    animation: floatCircle 12s infinite ease-in-out;
 }
 
 .bg-circle:nth-child(1) {
-    width: 300px;
-    height: 300px;
-    top: -100px;
-    left: -100px;
+    width: 400px;
+    height: 400px;
+    top: -150px;
+    left: -150px;
     animation-delay: 0s;
+    background: radial-gradient(circle, rgba(99, 102, 241, 0.18) 0%, transparent 70%);
 }
 
 .bg-circle:nth-child(2) {
-    width: 200px;
-    height: 200px;
-    bottom: -80px;
-    right: 20%;
-    animation-delay: 2s;
+    width: 300px;
+    height: 300px;
+    bottom: -100px;
+    right: 15%;
+    animation-delay: -3s;
+    background: radial-gradient(circle, rgba(6, 182, 212, 0.15) 0%, transparent 70%);
 }
 
 .bg-circle:nth-child(3) {
-    width: 150px;
-    height: 150px;
-    top: 40%;
-    right: -50px;
-    animation-delay: 4s;
+    width: 250px;
+    height: 250px;
+    top: 35%;
+    right: -80px;
+    animation-delay: -6s;
+    background: radial-gradient(circle, rgba(236, 72, 153, 0.12) 0%, transparent 70%);
 }
 
-@keyframes float {
-    0%, 100% { transform: translate(0, 0); }
-    25% { transform: translate(-20px, -20px); }
-    50% { transform: translate(20px, 20px); }
-    75% { transform: translate(20px, -20px); }
+.bg-circle:nth-child(4) {
+    width: 200px;
+    height: 200px;
+    top: 60%;
+    left: 10%;
+    animation-delay: -9s;
+    background: radial-gradient(circle, rgba(16, 185, 129, 0.10) 0%, transparent 70%);
 }
 
-/* 霓虹卡片样式 */
+@keyframes floatCircle {
+    0%, 100% { 
+        transform: translate(0, 0) scale(1); 
+        opacity: 0.8;
+    }
+    25% { 
+        transform: translate(-30px, -30px) scale(1.05); 
+        opacity: 1;
+    }
+    50% { 
+        transform: translate(20px, 20px) scale(0.95); 
+        opacity: 0.7;
+    }
+    75% { 
+        transform: translate(-20px, 20px) scale(1.02); 
+        opacity: 0.9;
+    }
+}
+
+/* 粒子效果 */
+.particles {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+    overflow: hidden;
+}
+
+.particle {
+    position: absolute;
+    width: 3px;
+    height: 3px;
+    background: rgba(99, 102, 241, 0.6);
+    border-radius: 50%;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+    animation: particleFloat linear infinite;
+}
+
+@keyframes particleFloat {
+    0% {
+        transform: translateY(100vh) rotate(0deg);
+        opacity: 0;
+    }
+    10% {
+        opacity: 1;
+    }
+    90% {
+        opacity: 1;
+    }
+    100% {
+        transform: translateY(-100vh) rotate(720deg);
+        opacity: 0;
+    }
+}
+
+/* ==================== 霓虹卡片系统 - 高级玻璃态设计 ==================== */
+
 .auth-container {
     display: flex;
     align-items: center;
@@ -111,45 +215,99 @@ body.login-page::before, body.register-page::before {
 }
 
 .auth-card {
-    background: rgba(0, 0, 0, 0.4);
-    backdrop-filter: blur(10px);
-    border-radius: 10px;
-    padding: 40px 30px;
+    background: rgba(15, 23, 42, 0.65);
+    backdrop-filter: blur(20px);
+    -webkit-backdrop-filter: blur(20px);
+    border-radius: 24px;
+    padding: 48px 36px;
     width: 100%;
-    max-width: 400px;
+    max-width: 420px;
     position: relative;
     overflow: hidden;
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.2), 
-                0 0 40px rgba(255, 0, 255, 0.1), 
-                inset 0 0 10px rgba(255, 255, 255, 0.1);
-    transition: all 0.3s ease;
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    box-shadow: 
+        0 25px 50px -12px rgba(0, 0, 0, 0.5),
+        0 0 0 1px rgba(255, 255, 255, 0.05) inset,
+        0 0 80px rgba(99, 102, 241, 0.1),
+        0 0 120px rgba(6, 182, 212, 0.05);
+    transition: all 0.5s cubic-bezier(0.4, 0, 0.2, 1);
+    animation: cardEntrance 0.8s ease-out;
 }
 
+@keyframes cardEntrance {
+    from {
+        opacity: 0;
+        transform: translateY(40px) scale(0.95);
+        filter: blur(10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+        filter: blur(0);
+    }
+}
+
+/* 动态渐变边框 */
 .auth-card::before {
     content: '';
     position: absolute;
-    top: -2px;
-    left: -2px;
-    right: -2px;
-    bottom: -2px;
-    background: linear-gradient(45deg, #ff00cc, #333399, #00ccff, #00ffcc, #ff00cc);
-    background-size: 400%;
-    border-radius: 12px;
+    top: -3px;
+    left: -3px;
+    right: -3px;
+    bottom: -3px;
+    background: linear-gradient(
+        45deg,
+        #6366f1,
+        #8b5cf6,
+        #06b6d4,
+        #10b981,
+        #ec4899,
+        #f59e0b,
+        #6366f1
+    );
+    background-size: 400% 400%;
+    border-radius: 26px;
     z-index: -1;
-    animation: glowing-border 20s linear infinite;
+    animation: glowingBorder 8s ease infinite;
+    opacity: 0.7;
 }
 
-@keyframes glowing-border {
-    0% { background-position: 0 0; }
-    50% { background-position: 400% 0; }
-    100% { background-position: 0 0; }
+@keyframes glowingBorder {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* 内部光晕效果 */
+.auth-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: -100%;
+    width: 100%;
+    height: 100%;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(99, 102, 241, 0.08),
+        transparent
+    );
+    transition: left 0.8s ease;
+    pointer-events: none;
 }
 
 .auth-card:hover {
-    box-shadow: 0 0 30px rgba(0, 255, 255, 0.4), 
-                0 0 60px rgba(255, 0, 255, 0.2), 
-                inset 0 0 15px rgba(255, 255, 255, 0.2);
+    box-shadow: 
+        0 30px 60px -12px rgba(0, 0, 0, 0.6),
+        0 0 0 1px rgba(255, 255, 255, 0.1) inset,
+        0 0 100px rgba(99, 102, 241, 0.15),
+        0 0 150px rgba(6, 182, 212, 0.08);
+    transform: translateY(-4px) scale(1.01);
+    border-color: rgba(255, 255, 255, 0.15);
+}
+
+.auth-card:hover::after {
+    left: 100%;
 }
 
 .auth-header {
@@ -182,49 +340,64 @@ body.login-page::before, body.register-page::before {
     margin-top: 10px;
 }
 
-/* 表单样式 */
+/* ==================== 表单系统 - 现代化霓虹设计 ==================== */
+
 .auth-form {
     margin-bottom: 1.5rem;
 }
 
 .form-group {
-    margin-bottom: 1.25rem;
+    margin-bottom: 1.5rem;
     position: relative;
 }
 
 .form-label {
     display: block;
-    margin-bottom: 0.5rem;
-    font-weight: 500;
+    margin-bottom: 0.75rem;
+    font-weight: 600;
     color: #e2e8f0;
     font-size: 0.875rem;
-    text-shadow: 0 1px 2px rgba(0,0,0,0.3);
+    text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+    letter-spacing: 0.02em;
 }
 
 .form-control {
     width: 100%;
-    padding: 0.75rem 1rem;
-    font-size: 0.875rem;
+    padding: 1rem 1.25rem;
+    font-size: 0.9375rem;
     line-height: 1.5;
     color: #e2e8f0;
-    background-color: rgba(0, 0, 0, 0.3);
+    background-color: rgba(15, 23, 42, 0.6);
     background-clip: padding-box;
-    border: 1px solid rgba(0, 255, 255, 0.3);
-    border-radius: 8px;
-    transition: all 0.3s ease-in-out;
+    border: 2px solid rgba(99, 102, 241, 0.3);
+    border-radius: 12px;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     backdrop-filter: blur(10px);
-    box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 
+        inset 0 2px 8px rgba(0, 0, 0, 0.4),
+        0 0 0 0 rgba(99, 102, 241, 0);
+}
+
+.form-control:hover {
+    border-color: rgba(99, 102, 241, 0.5);
+    background-color: rgba(15, 23, 42, 0.7);
+    box-shadow: 
+        inset 0 2px 8px rgba(0, 0, 0, 0.4),
+        0 0 20px rgba(99, 102, 241, 0.1);
 }
 
 .form-control:focus {
     color: #f8f9fa;
-    background-color: rgba(0, 0, 0, 0.5);
-    border-color: rgba(0, 255, 255, 0.7);
+    background-color: rgba(15, 23, 42, 0.8);
+    border-color: rgba(99, 102, 241, 0.8);
     outline: 0;
-    box-shadow: 0 0 0 0.2rem rgba(0, 255, 255, 0.25), inset 0 2px 4px rgba(0, 0, 0, 0.3);
+    box-shadow: 
+        inset 0 2px 8px rgba(0, 0, 0, 0.4),
+        0 0 0 4px rgba(99, 102, 241, 0.15),
+        0 0 30px rgba(99, 102, 241, 0.2);
 }
 
-/* 输入框聚焦效果 */
+/* 输入框聚焦动画效果 */
 .form-group.focused {
     position: relative;
 }
@@ -236,70 +409,121 @@ body.login-page::before, body.register-page::before {
     left: 0;
     width: 100%;
     height: 100%;
-    border-radius: 8px;
-    background: linear-gradient(45deg, transparent, rgba(0, 255, 255, 0.4), transparent);
+    border-radius: 12px;
+    background: linear-gradient(135deg, transparent, rgba(99, 102, 241, 0.1), transparent);
     z-index: -1;
-    animation: shine 2s infinite;
+    animation: inputShine 2s infinite;
+    pointer-events: none;
 }
 
-@keyframes shine {
+@keyframes inputShine {
     0% { transform: translateX(-100%) rotate(45deg); }
     100% { transform: translateX(100%) rotate(45deg); }
 }
 
 .form-control::placeholder {
-    color: rgba(203, 213, 225, 0.7);
+    color: rgba(203, 213, 225, 0.5);
+    font-weight: 400;
 }
 
+/* 错误状态 */
 .form-control.is-invalid {
     border-color: #f87171;
-    background-color: rgba(248, 113, 113, 0.15);
+    background-color: rgba(248, 113, 113, 0.1);
     padding-right: calc(1.5em + 0.75rem);
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23f87171' viewBox='0 0 12 12'%3e%3ccircle cx='6' cy='6' r='4.5'/%3e%3cpath stroke-linejoin='round' d='M5.8 3.6h.4L6 6.5z'/%3e%3ccircle cx='6' cy='8.2' r='.6' fill='%23f87171' stroke='none'/%3e%3c/svg%3e");
     background-repeat: no-repeat;
     background-position: right calc(0.375em + 0.1875rem) center;
     background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+    box-shadow: 
+        inset 0 2px 8px rgba(0, 0, 0, 0.4),
+        0 0 0 4px rgba(248, 113, 113, 0.1);
 }
 
 .invalid-feedback {
     display: none;
     width: 100%;
     margin-top: 0.5rem;
-    font-size: 0.75rem;
+    font-size: 0.8125rem;
     color: #f87171;
     font-weight: 500;
+    animation: shake 0.5s ease-in-out;
 }
 
 .form-control.is-invalid ~ .invalid-feedback {
     display: block;
 }
 
+/* 成功状态 */
 .form-control.is-valid {
     border-color: #4ade80;
-    background-color: rgba(74, 222, 128, 0.15);
+    background-color: rgba(74, 222, 128, 0.1);
     background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' width='8' height='8' viewBox='0 0 8 8'%3e%3cpath fill='%234ade80' d='M2.3 6.73L.6 4.53c-.4-1.04.46-1.4 1.1-.8l1.1 1.4 3.4-3.8c.6-.63 1.6-.27 1.2.7l-4 4.6c-.43.5-.8.4-1.1.1z'/%3e%3c/svg%3e");
     background-repeat: no-repeat;
     background-position: right calc(0.375em + 0.1875rem) center;
     background-size: calc(0.75em + 0.375rem) calc(0.75em + 0.375rem);
+    box-shadow: 
+        inset 0 2px 8px rgba(0, 0, 0, 0.4),
+        0 0 0 4px rgba(74, 222, 128, 0.1);
 }
 
-/* 按钮样式 */
-.btn-block {
-    display: block;
-    width: 100%;
-    padding: 12px;
-    font-size: 1rem;
-    font-weight: 500;
-    border: none;
-    border-radius: 8px;
+/* 密码切换图标 */
+.field-icon {
+    position: absolute;
+    right: 16px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: rgba(203, 213, 225, 0.6);
     cursor: pointer;
-    transition: all 0.3s ease;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    font-size: 1.125rem;
+    padding: 8px;
+    border-radius: 8px;
+}
+
+.field-icon:hover {
+    color: #6366f1;
+    background: rgba(99, 102, 241, 0.1);
+    transform: translateY(-50%) scale(1.1);
+}
+
+.field-icon:active {
+    transform: translateY(-50%) scale(0.95);
+}
+
+/* ==================== 按钮系统 - 高级霓虹效果 ==================== */
+
+.btn-block {
+    display: flex;
+    width: 100%;
+    padding: 1rem 2rem;
+    font-size: 1rem;
+    font-weight: 600;
+    border: none;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
     position: relative;
     overflow: hidden;
-    background: linear-gradient(45deg, #00ccff, #00ffcc);
-    box-shadow: 0 0 15px rgba(0, 255, 255, 0.3);
+    background: linear-gradient(135deg, #6366f1 0%, #8b5cf6 50%, #06b6d4 100%);
+    background-size: 200% 200%;
+    color: white;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+    box-shadow: 
+        0 10px 30px rgba(99, 102, 241, 0.3),
+        0 5px 15px rgba(0, 0, 0, 0.3),
+        inset 0 1px 0 rgba(255, 255, 255, 0.2);
+    animation: gradientMove 3s ease infinite;
 }
 
+@keyframes gradientMove {
+    0% { background-position: 0% 50%; }
+    50% { background-position: 100% 50%; }
+    100% { background-position: 0% 50%; }
+}
+
+/* 波纹效果 */
 .btn-block::before {
     content: '';
     position: absolute;
@@ -307,21 +531,67 @@ body.login-page::before, body.register-page::before {
     left: -100%;
     width: 100%;
     height: 100%;
-    background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
-    transition: 0.5s;
+    background: linear-gradient(
+        90deg,
+        transparent,
+        rgba(255, 255, 255, 0.3),
+        transparent
+    );
+    transition: left 0.7s ease;
 }
 
 .btn-block:hover::before {
     left: 100%;
 }
 
+/* 光晕脉冲 */
+.btn-block::after {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 0;
+    height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s ease, height 0.6s ease;
+}
+
+.btn-block:hover::after {
+    width: 400px;
+    height: 400px;
+}
+
 .btn-block:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+    transform: translateY(-3px) scale(1.02);
+    box-shadow: 
+        0 15px 40px rgba(99, 102, 241, 0.45),
+        0 8px 20px rgba(0, 0, 0, 0.35),
+        inset 0 1px 0 rgba(255, 255, 255, 0.3),
+        0 0 60px rgba(139, 92, 246, 0.25);
 }
 
 .btn-block:active {
-    transform: translateY(0);
+    transform: translateY(-1px) scale(0.98);
+    box-shadow: 
+        0 8px 20px rgba(99, 102, 241, 0.3),
+        0 4px 10px rgba(0, 0, 0, 0.3);
+}
+
+/* 加载状态 */
+.btn-block.loading {
+    pointer-events: none;
+    opacity: 0.85;
+}
+
+.btn-block.loading::before {
+    animation: loadingPulse 1.5s ease-in-out infinite;
+}
+
+@keyframes loadingPulse {
+    0%, 100% { opacity: 0.5; }
+    50% { opacity: 1; }
 }
 
 .btn-primary {

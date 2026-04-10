@@ -1,112 +1,242 @@
 /**
- * 仪表盘样式
+ * 仪表盘样式 - 现代化设计系统
+ * 版本: 2.0 - 增强视觉效果和交互体验
  */
 
-/* 统计卡片容器 */
+/* ==================== 统计卡片容器系统 ==================== */
+
 .stats-container {
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-    gap: 1.5rem;
-    margin-bottom: 2rem;
+    grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+    gap: 1.75rem;
+    margin-bottom: 2.5rem;
 }
 
-/* 统计卡片 */
+/* ==================== 统计卡片 - 玻璃态渐变设计 ==================== */
+
 .stat-card {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #0056b3 100%);
-    padding: 1.5rem;
-    border-radius: 8px;
+    background: linear-gradient(135deg, var(--primary-color) 0%, #4f46e5 100%);
+    padding: 2rem;
+    border-radius: 20px;
     color: white;
-    transition: transform 0.2s, box-shadow 0.2s;
+    transition: all 0.4s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    box-shadow: 
+        0 10px 30px rgba(99, 102, 241, 0.3),
+        0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
+/* 背景装饰 */
+.stat-card::before {
+    content: '';
+    position: absolute;
+    top: -50%;
+    right: -50%;
+    width: 200%;
+    height: 200%;
+    background: radial-gradient(circle, rgba(255, 255, 255, 0.1) 0%, transparent 70%);
+    animation: statCardFloat 8s ease-in-out infinite;
+    pointer-events: none;
+}
+
+@keyframes statCardFloat {
+    0%, 100% { transform: translate(0, 0); }
+    50% { transform: translate(-10%, 10%); }
+}
+
+/* 图标区域 */
+.stat-card .stat-icon {
+    font-size: 3rem;
+    opacity: 0.9;
+    margin-bottom: 1rem;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 72px;
+    height: 72px;
+    border-radius: 18px;
+    background: rgba(255, 255, 255, 0.15);
+    backdrop-filter: blur(10px);
+    box-shadow: 
+        0 8px 16px rgba(0, 0, 0, 0.2),
+        inset 0 1px 0 rgba(255, 255, 255, 0.25);
+    transition: transform 0.3s ease;
+}
+
+.stat-card:hover .stat-icon {
+    transform: scale(1.1) rotate(5deg);
+}
+
+/* 数值显示 */
+.stat-card .stat-value {
+    font-size: 3rem;
+    font-weight: 800;
+    margin: 1rem 0 0.5rem;
+    line-height: 1;
+    letter-spacing: -0.02em;
+    text-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+    position: relative;
+}
+
+/* 标签 */
+.stat-card .stat-label {
+    font-size: 0.9375rem;
+    opacity: 0.9;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    font-weight: 500;
+}
+
+/* 悬停效果 */
 .stat-card:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+    transform: translateY(-8px) scale(1.02);
+    box-shadow: 
+        0 20px 40px rgba(99, 102, 241, 0.35),
+        0 10px 20px rgba(0, 0, 0, 0.25);
 }
 
+/* 不同颜色的统计卡片变体 */
 .stat-card.primary {
-    background: linear-gradient(135deg, var(--primary-color) 0%, #0056b3 100%);
+    background: linear-gradient(135deg, #6366f1 0%, #4f46e5 100%);
+    box-shadow: 0 10px 30px rgba(99, 102, 241, 0.3), 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .stat-card.success {
-    background: linear-gradient(135deg, var(--success-color) 0%, #1e7e34 100%);
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    box-shadow: 0 10px 30px rgba(16, 185, 129, 0.3), 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .stat-card.info {
-    background: linear-gradient(135deg, var(--info-color) 0%, #117a8b 100%);
+    background: linear-gradient(135deg, #06b6d4 0%, #0891b2 100%);
+    box-shadow: 0 10px 30px rgba(6, 182, 212, 0.3), 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
 .stat-card.warning {
-    background: linear-gradient(135deg, var(--warning-color) 0%, #d39e00 100%);
+    background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+    box-shadow: 0 10px 30px rgba(245, 158, 11, 0.3), 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
-.stat-card .stat-icon {
-    font-size: 2rem;
-    opacity: 0.8;
-    margin-bottom: 0.5rem;
+.stat-card.danger {
+    background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    box-shadow: 0 10px 30px rgba(239, 68, 68, 0.3), 0 5px 15px rgba(0, 0, 0, 0.2);
 }
 
-.stat-card .stat-value {
-    font-size: 2.5rem;
-    font-weight: bold;
-    margin: 0.5rem 0;
-}
+/* ==================== 图表系统 ==================== */
 
-.stat-card .stat-label {
-    font-size: 0.875rem;
-    opacity: 0.9;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-}
-
-/* 图表容器 */
 .chart-container {
     position: relative;
-    height: 300px;
+    height: 350px;
     width: 100%;
+    background: white;
+    border-radius: 20px;
+    padding: 1.5rem;
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.07),
+        0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    transition: all 0.3s ease;
+}
+
+.chart-container:hover {
+    box-shadow: 
+        0 10px 25px -3px rgba(0, 0, 0, 0.1),
+        0 6px 8px -2px rgba(0, 0, 0, 0.06);
+    transform: translateY(-2px);
 }
 
 .chart-wrapper {
     padding: 1rem;
 }
 
-/* 操作记录表格 */
+/* ==================== 操作记录表格系统 ==================== */
+
 .operation-table {
     background: white;
-    border-radius: 8px;
+    border-radius: 20px;
     overflow: hidden;
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.07),
+        0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    border: 1px solid #f1f5f9;
 }
 
 .operation-table thead {
-    background-color: #f8f9fa;
+    background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    border-bottom: 2px solid #e2e8f0;
+}
+
+.operation-table thead th {
+    font-weight: 600;
+    color: #475569;
+    text-transform: uppercase;
+    font-size: 0.75rem;
+    letter-spacing: 0.05em;
+    padding: 1.25rem 1.5rem;
 }
 
 .operation-table tbody tr {
-    transition: background-color 0.2s;
+    transition: all 0.2s ease;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.operation-table tbody tr:last-child {
+    border-bottom: none;
 }
 
 .operation-table tbody tr:hover {
-    background-color: #f8f9fa;
+    background-color: #f8fafc;
+    transform: scale(1.01);
 }
 
-/* 组件配置页面 */
+.operation-table tbody td {
+    padding: 1.25rem 1.5rem;
+    vertical-align: middle;
+}
+
+/* ==================== 组件配置系统 ==================== */
+
 .widget-config-list {
     background: white;
-    border-radius: 8px;
-    padding: 1.5rem;
+    border-radius: 20px;
+    padding: 2rem;
+    box-shadow: 
+        0 4px 6px -1px rgba(0, 0, 0, 0.07),
+        0 2px 4px -2px rgba(0, 0, 0, 0.05);
+    border: 1px solid #f1f5f9;
 }
 
 .widget-item {
-    padding: 1rem;
-    border: 1px solid #dee2e6;
-    border-radius: 6px;
+    padding: 1.5rem;
+    border: 2px solid #f1f5f9;
+    border-radius: 16px;
     margin-bottom: 1rem;
-    transition: all 0.2s;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+}
+
+.widget-item::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    background: linear-gradient(180deg, #6366f1, #06b6d4);
+    opacity: 0;
+    transition: opacity 0.3s ease;
 }
 
 .widget-item:hover {
-    border-color: var(--primary-color);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border-color: #6366f1;
+    box-shadow: 
+        0 10px 25px -3px rgba(99, 102, 241, 0.12),
+        0 4px 8px -2px rgba(0, 0, 0, 0.06);
+    transform: translateX(4px);
+}
+
+.widget-item:hover::before {
+    opacity: 1;
 }
 
 .widget-item:last-child {
@@ -117,12 +247,13 @@
     display: flex;
     justify-content: space-between;
     align-items: center;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.75rem;
 }
 
 .widget-type {
-    font-weight: 500;
-    color: var(--primary-color);
+    font-weight: 600;
+    color: #6366f1;
+    font-size: 1.0625rem;
 }
 
 .widget-controls {
@@ -133,19 +264,29 @@
 
 /* 开关样式 */
 .form-switch .form-check-input {
-    width: 3em;
-    height: 1.5em;
+    width: 3.5em;
+    height: 1.75em;
     cursor: pointer;
+    background-color: #e2e8f0;
+    border: none;
+    transition: all 0.3s ease;
 }
 
-/* 加载状态 */
+.form-switch .form-check-input:checked {
+    background-color: #6366f1;
+    box-shadow: 0 0 10px rgba(99, 102, 241, 0.4);
+}
+
+/* ==================== 加载状态系统 ==================== */
+
 .loading-overlay {
     position: fixed;
     top: 0;
     left: 0;
     width: 100%;
     height: 100%;
-    background-color: rgba(255,255,255,0.8);
+    background: rgba(255, 255, 255, 0.95);
+    backdrop-filter: blur(10px);
     display: flex;
     justify-content: center;
     align-items: center;
@@ -153,31 +294,110 @@
 }
 
 .loading-spinner {
-    width: 3rem;
-    height: 3rem;
+    width: 4rem;
+    height: 4rem;
+    border: 4px solid #e2e8f0;
+    border-top-color: #6366f1;
+    border-radius: 50%;
+    animation: spin 1s linear infinite;
+    box-shadow: 0 0 20px rgba(99, 102, 241, 0.3);
 }
 
-/* 响应式调整 */
+/* ==================== 响应式设计系统 ==================== */
+
+@media (max-width: 1200px) {
+    .stats-container {
+        grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    }
+    
+    .stat-card .stat-value {
+        font-size: 2.5rem;
+    }
+}
+
+@media (max-width: 992px) {
+    .chart-container {
+        height: 300px;
+    }
+    
+    .stat-card .stat-icon {
+        width: 64px;
+        height: 64px;
+        font-size: 2.5rem;
+    }
+    
+    .stat-card .stat-value {
+        font-size: 2.25rem;
+    }
+}
+
 @media (max-width: 768px) {
     .stats-container {
         grid-template-columns: 1fr;
+        gap: 1.25rem;
+        margin-bottom: 2rem;
     }
-
+    
     .chart-container {
-        height: 250px;
+        height: 280px;
+        padding: 1rem;
+        border-radius: 16px;
     }
-
+    
     .widget-controls {
         flex-direction: column;
         align-items: flex-start;
+        gap: 0.75rem;
+    }
+    
+    .widget-config-list {
+        padding: 1.25rem;
+        border-radius: 16px;
+    }
+    
+    .widget-item {
+        padding: 1.25rem;
+        border-radius: 12px;
+    }
+    
+    .operation-table {
+        border-radius: 16px;
+    }
+    
+    .operation-table thead th,
+    .operation-table tbody td {
+        padding: 1rem;
     }
 }
 
-/* 动画效果 */
-@keyframes fadeIn {
+@media (max-width: 576px) {
+    .stat-card {
+        padding: 1.5rem;
+        border-radius: 16px;
+    }
+    
+    .stat-card .stat-value {
+        font-size: 2rem;
+    }
+    
+    .stat-card .stat-label {
+        font-size: 0.875rem;
+    }
+    
+    .stat-card .stat-icon {
+        width: 56px;
+        height: 56px;
+        font-size: 2rem;
+        border-radius: 14px;
+    }
+}
+
+/* ==================== 动画效果系统 ==================== */
+
+@keyframes fadeInUp {
     from {
         opacity: 0;
-        transform: translateY(10px);
+        transform: translateY(30px);
     }
     to {
         opacity: 1;
@@ -185,31 +405,85 @@
     }
 }
 
-.fade-in {
-    animation: fadeIn 0.3s ease-in-out;
+@keyframes scaleIn {
+    from {
+        opacity: 0;
+        transform: scale(0.9);
+    }
+    to {
+        opacity: 1;
+        transform: scale(1);
+    }
 }
 
-/* 状态徽章 */
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+@keyframes pulse {
+    0%, 100% {
+        transform: scale(1);
+    }
+    50% {
+        transform: scale(1.05);
+    }
+}
+
+/* 页面入场动画 */
+.fade-in {
+    animation: fadeInUp 0.5s ease-out forwards;
+}
+
+.scale-in {
+    animation: scaleIn 0.4s ease-out forwards;
+}
+
+/* 统计卡片交错动画 */
+.stats-container .stat-card:nth-child(1) {
+    animation-delay: 0ms;
+}
+.stats-container .stat-card:nth-child(2) {
+    animation-delay: 100ms;
+}
+.stats-container .stat-card:nth-child(3) {
+    animation-delay: 200ms;
+}
+.stats-container .stat-card:nth-child(4) {
+    animation-delay: 300ms;
+}
+
+/* 状态徽章系统 */
 .status-badge {
     display: inline-flex;
     align-items: center;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-    font-size: 0.875rem;
-    font-weight: 500;
+    padding: 0.375rem 0.875rem;
+    border-radius: 9999px;
+    font-size: 0.8125rem;
+    font-weight: 600;
+    letter-spacing: 0.02em;
+    transition: all 0.2s ease;
 }
 
 .status-badge.success {
-    background-color: #d4edda;
-    color: #155724;
+    background: linear-gradient(135deg, rgba(16, 185, 129, 0.15), rgba(16, 185, 129, 0.08));
+    color: #059669;
+    border: 1px solid rgba(16, 185, 129, 0.25);
 }
 
 .status-badge.failed {
-    background-color: #f8d7da;
-    color: #721c24;
+    background: linear-gradient(135deg, rgba(239, 68, 68, 0.15), rgba(239, 68, 68, 0.08));
+    color: #dc2626;
+    border: 1px solid rgba(239, 68, 68, 0.25);
 }
 
 .status-badge.pending {
-    background-color: #fff3cd;
-    color: #856404;
+    background: linear-gradient(135deg, rgba(245, 158, 11, 0.15), rgba(245, 158, 11, 0.08));
+    color: #d97706;
+    border: 1px solid rgba(245, 158, 11, 0.25);
+}
+
+.status-badge:hover {
+    transform: scale(1.05);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
 }
