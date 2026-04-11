@@ -55,8 +55,17 @@ bool UpdateFromRelease(const std::string& zipUrl);
 bool CopyDirectoryRecursive(const std::string& srcPath, const std::string& destPath);
 bool RemoveDirectoryRecursive(const std::string& dirPath);
 
+std::wstring Utf8ToWide(const std::string& str) {
+    if (str.empty()) return std::wstring();
+    int size = MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, NULL, 0);
+    if (size == 0) return std::wstring();
+    std::wstring result(size - 1, 0);
+    MultiByteToWideChar(CP_UTF8, 0, str.c_str(), -1, &result[0], size);
+    return result;
+}
+
 int ShowMessage(const std::string& title, const std::string& msg, UINT type = MB_OK) {
-    return MessageBoxA(NULL, msg.c_str(), title.c_str(), type | MB_TOPMOST);
+    return MessageBoxW(NULL, Utf8ToWide(msg).c_str(), Utf8ToWide(title).c_str(), type | MB_TOPMOST);
 }
 
 bool IsNumber(const std::string& s) {
@@ -560,7 +569,7 @@ void HandleUpdate() {
     std::string mirrorUrl = MIRROR_BASE_URL + zipUrl;
     
     std::string msg = "发现最新版本: " + tagName + "\n\n是否立即更新？\n\n下载源: " + mirrorUrl;
-    int result = MessageBoxA(NULL, msg.c_str(), "发现更新", MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
+    int result = MessageBoxW(NULL, Utf8ToWide(msg).c_str(), Utf8ToWide("发现更新").c_str(), MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
     
     if (result == IDYES) {
         if (UpdateFromRelease(mirrorUrl)) {
@@ -770,8 +779,8 @@ int main(int argc, char* argv[]) {
     if (argc > 1) {
         std::string arg1 = argv[1];
         if (IsNumber(arg1)) { port = arg1; }
-        else if (arg1 == "start" || arg1 == "restart") { if (argc > 2 && IsNumber(argv[2])) port = argv[2]; }
-        else if (arg1 == "stop" || arg1 == "init" || arg1 == "update") { /* 不处理端口 */ }
+        else if (arg1 == "start" || arg1 == "restart") { action = arg1; if (argc > 2 && IsNumber(argv[2])) port = argv[2]; }
+        else if (arg1 == "stop" || arg1 == "init" || arg1 == "update") { action = arg1; }
         else { action = "passthrough"; passthrough_args.assign(argv + 1, argv + argc); }
     }
 

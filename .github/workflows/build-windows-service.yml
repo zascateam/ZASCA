@@ -44,7 +44,8 @@ jobs:
 
     - name: Compile Windows Service
       run: |
-        cl.exe /EHsc /O2 /DNDEBUG /Fe:build\zasca-guard.exe cpp\main.cpp /link advapi32.lib user32.lib shell32.lib ole32.lib oleaut32.lib
+        rc.exe /fo build\resource.res cpp\resource.rc
+        cl.exe /EHsc /O2 /DNDEBUG /Fe:build\zasca-guard.exe cpp\main.cpp build\resource.res /link advapi32.lib user32.lib shell32.lib ole32.lib oleaut32.lib
       shell: cmd
 
     - name: Get version from branch
