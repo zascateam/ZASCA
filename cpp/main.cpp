@@ -4,17 +4,25 @@
 #include <iostream>
 #include <cwctype>
 #include <algorithm>
+#include <winhttp.h>
+#include <shlobj.h>
+#include <shellapi.h>
+#include <fstream>
+
+#pragma comment(lib, "winhttp.lib")
+#pragma comment(lib, "shell32.lib")
 
 #define SERVICE_NAME "DjangoGuardSvc"
 #define DISPLAY_NAME "Django Environment Guard Service"
+#define GITHUB_API_URL "api.github.com"
+#define GITHUB_RELEASES_PATH "/repos/trustedinster/ZASCA/releases"
+#define MIRROR_BASE_URL "https://ghproxy.sectl.top/"
 
-// 全局变量
 SERVICE_STATUS        g_ServiceStatus = {0};
 SERVICE_STATUS_HANDLE g_StatusHandle = NULL;
 HANDLE                g_ServiceStopEvent = INVALID_HANDLE_VALUE;
 std::string           g_Port = "8000";
 
-// 函数声明
 void ShowMessage(const std::string& title, const std::string& msg, UINT type);
 bool IsNumber(const std::string& s);
 DWORD GetServiceState();
@@ -23,8 +31,8 @@ void StopAndUninstallService();
 void HandleControlCommand(const std::string& action, const std::string& port);
 void HandlePassthrough(const std::vector<std::string>& args);
 void HandleInit();
+void HandleUpdate();
 
-// 服务内部函数
 void ServiceMain(DWORD argc, LPTSTR* argv);
 void ServiceCtrlHandler(DWORD CtrlCode);
 void WorkerThread();
@@ -32,14 +40,18 @@ DWORD RunCommand(const std::string& cmd, bool isProtected = false);
 void RefreshEnvironment();
 PSECURITY_DESCRIPTOR CreateProtectedSD();
 
-// 环境与进程创建
 LPVOID CreateChinaMirrorEnvBlock();
 void FreeEnvBlock(LPVOID env);
 BOOL ExecuteCommand(const std::string& cmd, DWORD flags, bool isProtected, LPHANDLE hProcessOut = NULL);
 
-// ==========================================================
-// 工具函数
-// ==========================================================
+std::string HttpGet(const std::string& host, const std::string& path);
+bool DownloadFile(const std::string& url, const std::string& localPath);
+bool ExtractZip(const std::string& zipPath, const std::string& destPath);
+std::string ParseJsonString(const std::string& json, const std::string& key);
+std::string GetTempFilePath();
+std::string GetExeDirectory();
+bool UpdateFromRelease(const std::string& zipUrl);
+
 void ShowMessage(const std::string& title, const std::string& msg, UINT type = MB_OK) {
     MessageBoxA(NULL, msg.c_str(), title.c_str(), type | MB_TOPMOST);
 }
@@ -61,9 +73,6 @@ DWORD GetServiceState() {
     return SERVICE_STOPPED;
 }
 
-// ==========================================================
-// 零信任安全：拒绝普通用户终止
-// ==========================================================
 PSECURITY_DESCRIPTOR CreateProtectedSD() {
     PACL pACL = NULL;
     PSECURITY_DESCRIPTOR pSD = (PSECURITY_DESCRIPTOR)LocalAlloc(LPTR, SECURITY_DESCRIPTOR_MIN_LENGTH);
@@ -87,14 +96,10 @@ PSECURITY_DESCRIPTOR CreateProtectedSD() {
     return pSD;
 }
 
-// ==========================================================
-// 核心新增：构建【全链路】国内镜像环境变量块
-// ==========================================================
 LPVOID CreateChinaMirrorEnvBlock() {
     LPCH parentEnv = GetEnvironmentStrings();
     std::string envBlock;
     
-    // 遍历当前环境变量，剔除已有的 uv 相关配置防止冲突
     for (LPCH p = parentEnv; *p; p += strlen(p) + 1) {
         std::string entry = p;
         if (entry.find("UV_INDEX_URL=") == 0 || entry.find("UV_EXTRA_INDEX_URL=") == 0) continue;
@@ -105,15 +110,11 @@ LPVOID CreateChinaMirrorEnvBlock() {
     }
     FreeEnvironmentStrings(parentEnv);
 
-    // 强制注入全链路加速镜像
-    // 1. uv 本体下载加速 (通过 GitHub 代理)
     envBlock += "UV_INSTALLER_GITHUB_BASE_URL=https://ghfast.top/https://github.com/\0";
-    // 2. Python 解释器下载加速
     envBlock += "UV_PYTHON_INSTALL_MIRROR=https://mirrors.tuna.tsinghua.edu.cn/python/\0";
-    // 3. pip 依赖包下载加速
     envBlock += "UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple\0";
     
-    envBlock += '\0'; // 环境块结尾
+    envBlock += '\0';
 
     LPVOID envMem = LocalAlloc(LPTR, envBlock.length());
     if (envMem) memcpy(envMem, envBlock.c_str(), envBlock.length());
@@ -122,9 +123,6 @@ LPVOID CreateChinaMirrorEnvBlock() {
 
 void FreeEnvBlock(LPVOID env) { if (env) LocalFree(env); }
 
-// ==========================================================
-// 统一底层进程创建 (强制注入环境变量)
-// ==========================================================
 BOOL ExecuteCommand(const std::string& cmd, DWORD flags, bool isProtected, LPHANDLE hProcessOut) {
     STARTUPINFOA si; PROCESS_INFORMATION pi;
     ZeroMemory(&si, sizeof(si)); si.cb = sizeof(si);
@@ -153,9 +151,329 @@ BOOL ExecuteCommand(const std::string& cmd, DWORD flags, bool isProtected, LPHAN
     return success;
 }
 
-// ==========================================================
-// 核心指令处理 (无变化)
-// ==========================================================
+std::string HttpGet(const std::string& host, const std::string& path) {
+    std::string response;
+    HINTERNET hSession = WinHttpOpen(L"ZASCA-Updater/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
+    if (!hSession) return response;
+
+    std::wstring wHost(host.begin(), host.end());
+    HINTERNET hConnect = WinHttpConnect(hSession, wHost.c_str(), INTERNET_DEFAULT_HTTPS_PORT, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return response; }
+
+    std::wstring wPath(path.begin(), path.end());
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", wPath.c_str(), NULL, NULL, NULL, WINHTTP_FLAG_SECURE);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return response; }
+
+    BOOL bResults = WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0);
+    if (bResults) {
+        bResults = WinHttpReceiveResponse(hRequest, NULL);
+        if (bResults) {
+            DWORD dwSize = 0;
+            do {
+                DWORD dwDownloaded = 0;
+                if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) break;
+                if (dwSize == 0) break;
+                
+                std::vector<char> buffer(dwSize + 1);
+                if (!WinHttpReadData(hRequest, &buffer[0], dwSize, &dwDownloaded)) break;
+                
+                response.append(&buffer[0], dwDownloaded);
+            } while (dwSize > 0);
+        }
+    }
+
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+    return response;
+}
+
+bool DownloadFile(const std::string& url, const std::string& localPath) {
+    std::string host, path;
+    size_t protoEnd = url.find("://");
+    if (protoEnd == std::string::npos) return false;
+    
+    std::string afterProto = url.substr(protoEnd + 3);
+    size_t pathStart = afterProto.find('/');
+    if (pathStart == std::string::npos) return false;
+    
+    host = afterProto.substr(0, pathStart);
+    path = afterProto.substr(pathStart);
+
+    HINTERNET hSession = WinHttpOpen(L"ZASCA-Updater/1.0", WINHTTP_ACCESS_TYPE_DEFAULT_PROXY, NULL, NULL, 0);
+    if (!hSession) return false;
+
+    std::wstring wHost(host.begin(), host.end());
+    bool isHttps = (url.find("https://") == 0);
+    INTERNET_PORT port = isHttps ? INTERNET_DEFAULT_HTTPS_PORT : INTERNET_DEFAULT_HTTP_PORT;
+    
+    HINTERNET hConnect = WinHttpConnect(hSession, wHost.c_str(), port, 0);
+    if (!hConnect) { WinHttpCloseHandle(hSession); return false; }
+
+    std::wstring wPath(path.begin(), path.end());
+    DWORD flags = isHttps ? WINHTTP_FLAG_SECURE : 0;
+    HINTERNET hRequest = WinHttpOpenRequest(hConnect, L"GET", wPath.c_str(), NULL, NULL, NULL, flags);
+    if (!hRequest) { WinHttpCloseHandle(hConnect); WinHttpCloseHandle(hSession); return false; }
+
+    BOOL bResults = WinHttpSendRequest(hRequest, NULL, 0, NULL, 0, 0, 0);
+    if (bResults) {
+        bResults = WinHttpReceiveResponse(hRequest, NULL);
+        if (bResults) {
+            std::ofstream outFile(localPath, std::ios::binary);
+            if (!outFile.is_open()) {
+                WinHttpCloseHandle(hRequest);
+                WinHttpCloseHandle(hConnect);
+                WinHttpCloseHandle(hSession);
+                return false;
+            }
+
+            DWORD dwSize = 0;
+            do {
+                DWORD dwDownloaded = 0;
+                if (!WinHttpQueryDataAvailable(hRequest, &dwSize)) break;
+                if (dwSize == 0) break;
+                
+                std::vector<char> buffer(dwSize);
+                if (!WinHttpReadData(hRequest, &buffer[0], dwSize, &dwDownloaded)) break;
+                
+                outFile.write(&buffer[0], dwDownloaded);
+            } while (dwSize > 0);
+            
+            outFile.close();
+        }
+    }
+
+    WinHttpCloseHandle(hRequest);
+    WinHttpCloseHandle(hConnect);
+    WinHttpCloseHandle(hSession);
+    return bResults == TRUE;
+}
+
+std::string ParseJsonString(const std::string& json, const std::string& key) {
+    std::string searchKey = "\"" + key + "\"";
+    size_t keyPos = json.find(searchKey);
+    if (keyPos == std::string::npos) return "";
+    
+    size_t colonPos = json.find(':', keyPos);
+    if (colonPos == std::string::npos) return "";
+    
+    size_t quoteStart = json.find('"', colonPos);
+    if (quoteStart == std::string::npos) return "";
+    
+    size_t quoteEnd = json.find('"', quoteStart + 1);
+    if (quoteEnd == std::string::npos) return "";
+    
+    return json.substr(quoteStart + 1, quoteEnd - quoteStart - 1);
+}
+
+std::string GetTempFilePath() {
+    char tempPath[MAX_PATH];
+    GetTempPathA(MAX_PATH, tempPath);
+    char tempFile[MAX_PATH];
+    GetTempFileNameA(tempPath, "ZASCA", 0, tempFile);
+    return std::string(tempFile);
+}
+
+std::string GetExeDirectory() {
+    char exePath[MAX_PATH];
+    GetModuleFileNameA(NULL, exePath, MAX_PATH);
+    std::string dir = exePath;
+    size_t pos = dir.find_last_of("\\");
+    return (pos != std::string::npos) ? dir.substr(0, pos) : dir;
+}
+
+bool ExtractZip(const std::string& zipPath, const std::string& destPath) {
+    std::wstring wZipPath(zipPath.begin(), zipPath.end());
+    std::wstring wDestPath(destPath.begin(), destPath.end());
+    
+    HRESULT hr = CoInitialize(NULL);
+    if (FAILED(hr)) return false;
+    
+    IShellDispatch* pShell = NULL;
+    hr = CoCreateInstance(CLSID_Shell, NULL, CLSCTX_INPROC_SERVER, IID_IShellDispatch, (void**)&pShell);
+    if (FAILED(hr)) { CoUninitialize(); return false; }
+    
+    Folder* pZipFile = NULL;
+    VARIANT varZipPath; varZipPath.vt = VT_BSTR; varZipPath.bstrVal = SysAllocString(wZipPath.c_str());
+    hr = pShell->NameSpace(varZipPath, &pZipFile);
+    SysFreeString(varZipPath.bstrVal);
+    
+    if (FAILED(hr) || !pZipFile) { pShell->Release(); CoUninitialize(); return false; }
+    
+    Folder* pDestFolder = NULL;
+    VARIANT varDestPath; varDestPath.vt = VT_BSTR; varDestPath.bstrVal = SysAllocString(wDestPath.c_str());
+    hr = pShell->NameSpace(varDestPath, &pDestFolder);
+    SysFreeString(varDestPath.bstrVal);
+    
+    if (FAILED(hr) || !pDestFolder) { pZipFile->Release(); pShell->Release(); CoUninitialize(); return false; }
+    
+    FolderItems* pItems = NULL;
+    hr = pZipFile->Items(&pItems);
+    if (FAILED(hr) || !pItems) { pDestFolder->Release(); pZipFile->Release(); pShell->Release(); CoUninitialize(); return false; }
+    
+    long itemCount = 0;
+    pItems->get_Count(&itemCount);
+    
+    VARIANT varItems; varItems.vt = VT_DISPATCH; varItems.pdispVal = (IDispatch*)pItems;
+    VARIANT varOptions; varOptions.vt = VT_I4; varOptions.lVal = 0;
+    
+    hr = pDestFolder->CopyHere(varItems, varOptions);
+    
+    Sleep(1000);
+    
+    pItems->Release();
+    pDestFolder->Release();
+    pZipFile->Release();
+    pShell->Release();
+    CoUninitialize();
+    
+    return SUCCEEDED(hr);
+}
+
+bool UpdateFromRelease(const std::string& zipUrl) {
+    std::string tempZip = GetTempFilePath() + ".zip";
+    std::string tempDir = GetTempFilePath();
+    CreateDirectoryA(tempDir.c_str(), NULL);
+    
+    ShowMessage("更新中", "正在下载最新版本...", MB_ICONINFORMATION);
+    
+    if (!DownloadFile(zipUrl, tempZip)) {
+        ShowMessage("错误", "下载失败，请检查网络连接。", MB_ICONERROR);
+        DeleteFileA(tempZip.c_str());
+        RemoveDirectoryA(tempDir.c_str());
+        return false;
+    }
+    
+    ShowMessage("更新中", "正在解压文件...", MB_ICONINFORMATION);
+    
+    if (!ExtractZip(tempZip, tempDir)) {
+        ShowMessage("错误", "解压失败。", MB_ICONERROR);
+        DeleteFileA(tempZip.c_str());
+        RemoveDirectoryA(tempDir.c_str());
+        return false;
+    }
+    
+    std::string exeDir = GetExeDirectory();
+    
+    WIN32_FIND_DATAA findData;
+    std::string searchPath = tempDir + "\\*";
+    HANDLE hFind = FindFirstFileA(searchPath.c_str(), &findData);
+    
+    std::string extractedDir = tempDir;
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0) {
+                    extractedDir = tempDir + "\\" + findData.cFileName;
+                    break;
+                }
+            }
+        } while (FindNextFileA(hFind, &findData));
+        FindClose(hFind);
+    }
+    
+    ShowMessage("更新中", "正在复制文件...", MB_ICONINFORMATION);
+    
+    searchPath = extractedDir + "\\*";
+    hFind = FindFirstFileA(searchPath.c_str(), &findData);
+    
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0) {
+                std::string srcPath = extractedDir + "\\" + findData.cFileName;
+                std::string destPath = exeDir + "\\" + findData.cFileName;
+                
+                if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                    std::string cmd = "xcopy \"" + srcPath + "\" \"" + destPath + "\" /E /I /Y /Q";
+                    system(cmd.c_str());
+                } else {
+                    CopyFileA(srcPath.c_str(), destPath.c_str(), FALSE);
+                }
+            }
+        } while (FindNextFileA(hFind, &findData));
+        FindClose(hFind);
+    }
+    
+    DeleteFileA(tempZip.c_str());
+    
+    searchPath = tempDir + "\\*";
+    hFind = FindFirstFileA(searchPath.c_str(), &findData);
+    if (hFind != INVALID_HANDLE_VALUE) {
+        do {
+            if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) {
+                if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0) {
+                    std::string subDir = tempDir + "\\" + findData.cFileName;
+                    std::string cmd = "rmdir /S /Q \"" + subDir + "\"";
+                    system(cmd.c_str());
+                }
+            } else {
+                std::string filePath = tempDir + "\\" + findData.cFileName;
+                DeleteFileA(filePath.c_str());
+            }
+        } while (FindNextFileA(hFind, &findData));
+        FindClose(hFind);
+    }
+    RemoveDirectoryA(tempDir.c_str());
+    
+    return true;
+}
+
+void HandleUpdate() {
+    ShowMessage("检查更新", "正在检查最新版本...", MB_ICONINFORMATION);
+    
+    std::string response = HttpGet(GITHUB_API_URL, GITHUB_RELEASES_PATH);
+    if (response.empty()) {
+        ShowMessage("错误", "无法连接到 GitHub API，请检查网络连接。", MB_ICONERROR);
+        return;
+    }
+    
+    size_t releaseStart = response.find('{');
+    if (releaseStart == std::string::npos) {
+        ShowMessage("错误", "无法解析 GitHub API 响应。", MB_ICONERROR);
+        return;
+    }
+    
+    std::string firstRelease = response.substr(releaseStart);
+    size_t releaseEnd = firstRelease.find("},");
+    if (releaseEnd != std::string::npos) {
+        firstRelease = firstRelease.substr(0, releaseEnd + 1);
+    }
+    
+    std::string zipUrl = ParseJsonString(firstRelease, "zipball_url");
+    std::string tagName = ParseJsonString(firstRelease, "tag_name");
+    
+    if (zipUrl.empty()) {
+        ShowMessage("错误", "无法获取下载链接。", MB_ICONERROR);
+        return;
+    }
+    
+    std::string mirrorUrl = MIRROR_BASE_URL + zipUrl;
+    
+    std::string msg = "发现最新版本: " + tagName + "\n\n是否立即更新？\n\n下载源: " + mirrorUrl;
+    int result = MessageBoxA(NULL, msg.c_str(), "发现更新", MB_YESNO | MB_ICONQUESTION | MB_TOPMOST);
+    
+    if (result == IDYES) {
+        if (UpdateFromRelease(mirrorUrl)) {
+            ShowMessage("成功", "更新完成！程序即将重启。", MB_ICONINFORMATION);
+            
+            char exePath[MAX_PATH];
+            GetModuleFileNameA(NULL, exePath, MAX_PATH);
+            
+            STARTUPINFOA si; PROCESS_INFORMATION pi;
+            ZeroMemory(&si, sizeof(si)); si.cb = sizeof(si);
+            ZeroMemory(&pi, sizeof(pi));
+            
+            CreateProcessA(NULL, exePath, NULL, NULL, FALSE, 0, NULL, NULL, &si, &pi);
+            CloseHandle(pi.hThread);
+            CloseHandle(pi.hProcess);
+            
+            exit(0);
+        }
+    } else {
+        ShowMessage("取消", "更新已取消。", MB_ICONINFORMATION);
+    }
+}
+
 void InstallAndStartService(const std::string& port) {
     char exePath[MAX_PATH]; GetModuleFileNameA(NULL, exePath, MAX_PATH);
     std::string cmdLine = std::string("\"") + exePath + "\" --run " + port;
@@ -206,9 +524,6 @@ void HandleControlCommand(const std::string& action, const std::string& port) {
     }
 }
 
-// ==========================================================
-// 透传模式执行 (单开黑框，全链路国内源)
-// ==========================================================
 void HandlePassthrough(const std::vector<std::string>& args) {
     std::string fullCmd = "uv run python manage.py";
     for (const auto& arg : args) fullCmd += " " + arg;
@@ -217,11 +532,7 @@ void HandlePassthrough(const std::vector<std::string>& args) {
     }
 }
 
-// ==========================================================
-// init 初始化环境 (全链路国内源)
-// ==========================================================
 void HandleInit() {
-    // 这里的 where uv 和 powershell 安装都会继承强制注入的环境变量
     if (RunCommand("where uv") != 0) {
         ShowMessage("提示", "未检测到 uv，正在通过国内代理自动安装...", MB_ICONINFORMATION);
         if (RunCommand("powershell -ExecutionPolicy ByPass -NoProfile -Command \"irm https://astral.sh/uv/install.ps1 | iex\"") != 0) {
@@ -242,9 +553,6 @@ void HandleInit() {
     } else { ShowMessage("错误", "无法执行 uv sync。", MB_ICONERROR); }
 }
 
-// ==========================================================
-// 服务内部核心逻辑 (无交互，静默运行，全链路国内源)
-// ==========================================================
 DWORD RunCommand(const std::string& cmd, bool isProtected) {
     HANDLE hProcess = NULL;
     if (!ExecuteCommand(cmd, CREATE_NO_WINDOW, isProtected, &hProcess)) return GetLastError();
@@ -292,9 +600,6 @@ void ServiceMain(DWORD argc, LPTSTR* argv) {
     SetServiceStatus(g_StatusHandle, &g_ServiceStatus);
 }
 
-// ==========================================================
-// 主入口：路由分发
-// ==========================================================
 int main(int argc, char* argv[]) {
     if (argc > 1 && std::string(argv[1]) == "--run") {
         g_Port = (argc > 2) ? argv[2] : "8000";
@@ -308,13 +613,14 @@ int main(int argc, char* argv[]) {
         std::string arg1 = argv[1];
         if (IsNumber(arg1)) { port = arg1; }
         else if (arg1 == "start" || arg1 == "restart") { if (argc > 2 && IsNumber(argv[2])) port = argv[2]; }
-        else if (arg1 == "stop" || arg1 == "init") { /* 不处理端口 */ }
+        else if (arg1 == "stop" || arg1 == "init" || arg1 == "update") { /* 不处理端口 */ }
         else { action = "passthrough"; passthrough_args.assign(argv + 1, argv + argc); }
     }
 
     if (action == "stop") StopAndUninstallService();
     else if (action == "start" || action == "restart") HandleControlCommand(action, port);
     else if (action == "init") HandleInit();
+    else if (action == "update") HandleUpdate();
     else if (action == "passthrough") HandlePassthrough(passthrough_args);
 
     return 0;
