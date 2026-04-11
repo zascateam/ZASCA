@@ -1,4 +1,5 @@
 #include <windows.h>
+#include <aclapi.h>
 #include <string>
 #include <vector>
 #include <iostream>
@@ -23,7 +24,7 @@ SERVICE_STATUS_HANDLE g_StatusHandle = NULL;
 HANDLE                g_ServiceStopEvent = INVALID_HANDLE_VALUE;
 std::string           g_Port = "8000";
 
-void ShowMessage(const std::string& title, const std::string& msg, UINT type);
+int ShowMessage(const std::string& title, const std::string& msg, UINT type);
 bool IsNumber(const std::string& s);
 DWORD GetServiceState();
 void InstallAndStartService(const std::string& port);
@@ -54,8 +55,8 @@ bool UpdateFromRelease(const std::string& zipUrl);
 bool CopyDirectoryRecursive(const std::string& srcPath, const std::string& destPath);
 bool RemoveDirectoryRecursive(const std::string& dirPath);
 
-void ShowMessage(const std::string& title, const std::string& msg, UINT type = MB_OK) {
-    MessageBoxA(NULL, msg.c_str(), title.c_str(), type | MB_TOPMOST);
+int ShowMessage(const std::string& title, const std::string& msg, UINT type = MB_OK) {
+    return MessageBoxA(NULL, msg.c_str(), title.c_str(), type | MB_TOPMOST);
 }
 
 bool IsNumber(const std::string& s) {
