@@ -6,6 +6,7 @@ from django.contrib import messages
 from django.http import HttpResponseRedirect
 from django.utils import timezone
 from .models import DashboardWidget, UserActivity, SystemConfig
+import smtplib
 import logging
 
 logger = logging.getLogger('zasca')
@@ -140,46 +141,20 @@ class SystemConfigAdmin(admin.ModelAdmin):
 
     def send_test_email(self, request, pk):
         """发送测试邮件"""
-        import smtplib
-        from email.mime.text import MIMEText
-        from email.mime.multipart import MIMEMultipart
+        from apps.accounts.email_service import EmailService
+        from django.core.exceptions import ValidationError
 
         test_email = None
 
         try:
             config = SystemConfig.objects.get(pk=pk)
 
-            # 验证必要的SMTP配置是否存在
-            if not all([
-                config.smtp_host, config.smtp_port,
-                config.smtp_username, config.smtp_password,
-                config.smtp_from_email
-            ]):
-                error_msg = "SMTP配置不完整，无法发送测试邮件"
-                messages.error(request, error_msg)
-                logger.warning(
-                    f"测试邮件发送失败 - 配置不完整: "
-                    f"{request.user.username}"
-                )
-                return HttpResponseRedirect(
-                    request.META.get('HTTP_REFERER', '/admin/')
-                )
-
-            # Type assertions after validation
-            assert config.smtp_host is not None
-            assert config.smtp_port is not None
-            assert config.smtp_username is not None
-            assert config.smtp_password is not None
-            assert config.smtp_from_email is not None
-
-            # 从GET参数获取测试邮箱地址，如果没有则使用当前用户邮箱
             test_email = (
                 request.GET.get('test_email') or
                 request.user.email or
                 config.smtp_from_email
             )
 
-            # 创建HTML邮件模板，模拟完整的邮件发送逻辑
             subject = 'Django Admin 测试邮件'
             html_body = f'''
             <!DOCTYPE html>
@@ -252,42 +227,32 @@ class SystemConfigAdmin(admin.ModelAdmin):
             </html>
             '''
 
-            # 使用配置的SMTP设置直接发送邮件
-            msg = MIMEMultipart('alternative')  # 使用alternative类型支持HTML和纯文本
-            msg['From'] = config.smtp_from_email
-            msg['To'] = test_email
-            msg['Subject'] = subject
-
-            # 添加纯文本版本作为备选
             text_body = (
                 f'这是一封测试邮件，用于验证邮件配置是否正确。'
                 f'系统配置的SMTP服务器可以正常发送邮件。'
                 f'测试时间: {timezone.now().strftime("%Y-%m-%d %H:%M:%S")}'
             )
-            part1 = MIMEText(text_body, 'plain', 'utf-8')
-            part2 = MIMEText(html_body, 'html', 'utf-8')
 
-            msg.attach(part1)
-            msg.attach(part2)
-
-            # 根据配置决定是否使用STARTTLS
-            server = smtplib.SMTP(config.smtp_host, config.smtp_port)
-            server.ehlo()
-
-            if config.smtp_use_tls:
-                server.starttls()
-                server.ehlo()
-
-            server.login(config.smtp_username, config.smtp_password)
-            text = msg.as_string()
-            server.sendmail(config.smtp_from_email, [test_email], text)
-            server.quit()
+            email_service = EmailService.from_system_config(config)
+            email_service.send_email(
+                to_emails=[test_email],
+                subject=subject,
+                text_body=text_body,
+                html_body=html_body,
+            )
 
             success_msg = f"测试邮件已成功发送至 {test_email}！"
             messages.success(request, success_msg)
             logger.info(
                 f"测试邮件发送成功 - 用户: {request.user.username}, "
                 f"目标: {test_email}"
+            )
+        except ValidationError:
+            error_msg = "SMTP配置不完整，无法发送测试邮件"
+            messages.error(request, error_msg)
+            logger.warning(
+                f"测试邮件发送失败 - 配置不完整: "
+                f"{request.user.username}"
             )
         except smtplib.SMTPAuthenticationError:
             error_msg = "SMTP认证失败，请检查用户名和密码"

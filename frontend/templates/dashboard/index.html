@@ -6,136 +6,454 @@
 
 {% block extra_css %}
 <style>
-.stat-card {
-    border-left: 4px solid #0d6efd;
-    transition: transform 0.2s;
-}
-.stat-card:hover {
-    transform: translateY(-2px);
-}
-.stat-card.account-opening {
-    border-left-color: #28a745;
-}
-.stat-card.requests {
-    border-left-color: #ffc107;
-}
-.stat-card.users {
-    border-left-color: #17a2b8;
-}
-.stat-number {
-    font-size: 1.5rem;
-    font-weight: bold;
-    color: #495057;
-}
-.quick-action-card {
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
-    transition: all 0.2s;
-}
-.quick-action-card:hover {
-    border-color: #0d6efd;
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
-    text-decoration: none;
-}
-.recent-requests-table {
-    font-size: 0.9rem;
+.dashboard-container {
+    max-width: 1200px;
+    margin: 0 auto;
+    padding: 2rem;
 }
 
-/* 电脑展示样式 */
+.page-header {
+    text-align: center;
+    margin-bottom: 2rem;
+}
+
+.page-header h1 {
+    font-size: var(--md-sys-typescale-headline-large-size);
+    font-weight: var(--md-sys-typescale-weight-bold);
+    color: var(--md-sys-color-on-surface);
+    margin-bottom: var(--md-sys-spacing-margin-md);
+    line-height: var(--md-sys-typescale-line-height-condensed);
+}
+
+.page-subtitle {
+    font-size: var(--md-sys-typescale-body-large-size);
+    color: var(--md-sys-color-on-surface-variant);
+    margin-bottom: var(--md-sys-spacing-margin-xl);
+}
+
+.filter-card {
+    background: var(--md-sys-color-surface);
+    border-radius: var(--md-sys-shape-corner-medium);
+    box-shadow: var(--md-sys-elevation-1);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+    .filter-card {
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+
+@media (max-width: 768px) {
+    .filter-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .filter-item {
+        min-width: unset;
+    }
+}
+
+.filter-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-label {
+    font-size: var(--md-sys-typescale-label-large-font-size);
+    font-weight: var(--md-sys-typescale-label-large-font-weight);
+    color: var(--md-sys-color-on-surface-variant);
+    margin-bottom: 0.5rem;
+}
+
+.md-input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: var(--md-sys-color-surface-variant);
+    font-family: inherit;
+    font-size: var(--md-sys-typescale-body-large-size);
+    color: var(--md-sys-color-on-surface);
+    padding: 16px;
+    box-sizing: border-box;
+    border-radius: var(--md-sys-shape-corner-extra-large);
+}
+
+.md-input:focus {
+    background-color: var(--md-sys-color-surface);
+    border-bottom: 2px solid var(--md-sys-color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.md-input:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.04);
+}
+
+select.md-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    padding-right: 36px;
+    cursor: pointer;
+}
+
 .computer-grid {
     display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-    gap: 1.5rem;
-    margin-top: 1.5rem;
+    grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+    gap: var(--md-sys-spacing-padding-lg);
+    margin-top: var(--md-sys-spacing-margin-lg);
 }
 
 .computer-card {
-    border: 1px solid #dee2e6;
-    border-radius: 0.375rem;
+    background: var(--md-sys-color-surface);
+    border-radius: var(--md-sys-shape-corner-large);
     overflow: hidden;
-    transition: all 0.3s ease;
-    background: white;
-    box-shadow: 0 0.125rem 0.25rem rgba(0, 0, 0, 0.075);
+    transition: 
+        box-shadow var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard),
+        transform var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+    box-shadow: var(--md-sys-elevation-level1);
 }
 
 .computer-card:hover {
-    transform: translateY(-5px);
-    box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15);
-    border-color: #0d6efd;
+    transform: translateY(-4px);
+    box-shadow: var(--md-sys-elevation-level3);
 }
 
 .computer-card-header {
-    padding: 1rem;
-    background-color: #f8f9fa;
-    border-bottom: 1px solid #dee2e6;
+    padding: var(--md-sys-spacing-padding-lg);
+    background: var(--md-sys-color-primary-container);
+    color: var(--md-sys-color-on-primary-container);
+    border-bottom: 1px solid var(--md-sys-color-outline-variant);
 }
 
-.computer-card-body {
-    padding: 1rem;
+.computer-card-header h5 {
+    font-size: var(--md-sys-typescale-title-large-size);
+    font-weight: var(--md-sys-typescale-weight-medium);
+    margin: 0;
+    color: var(--md-sys-color-on-primary-container);
+    display: flex;
+    align-items: center;
 }
 
 .status-indicator {
     display: inline-block;
-    width: 10px;
-    height: 10px;
-    border-radius: 50%;
-    margin-right: 5px;
+    width: 12px;
+    height: 12px;
+    border-radius: var(--md-sys-shape-corner-full);
+    margin-right: var(--md-sys-spacing-margin-sm);
 }
 
 .status-online {
-    background-color: #28a745;
+    background-color: var(--md-sys-color-success);
 }
 
 .status-offline {
-    background-color: #dc3545;
+    background-color: var(--md-sys-color-error);
 }
 
 .status-error {
-    background-color: #ffc107;
+    background-color: var(--md-sys-color-warning);
 }
 
 .status-unknown {
-    background-color: #6c757d;
+    background-color: var(--md-sys-color-outline);
 }
 
-.apply-section {
-    margin-top: 3rem;
-    padding: 2rem;
-    background-color: #f8f9fa;
-    border-radius: 0.5rem;
-    border: 1px solid #dee2e6;
+.computer-card-body {
+    padding: var(--md-sys-spacing-padding-lg);
+}
+
+.info-list {
+    list-style: none;
+    padding: 0;
+    margin: 0 0 var(--md-sys-spacing-margin-lg) 0;
+}
+
+.info-list li {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: var(--md-sys-spacing-margin-sm);
+    font-size: var(--md-sys-typescale-body-medium-size);
+}
+
+.info-list li:last-child {
+    margin-bottom: 0;
+}
+
+.info-label {
+    font-weight: var(--md-sys-typescale-weight-medium);
+    color: var(--md-sys-color-on-surface-variant);
+}
+
+.info-value {
+    color: var(--md-sys-color-on-surface);
+}
+
+.status-text {
+    font-weight: var(--md-sys-typescale-weight-medium);
+}
+
+.status-text.online {
+    color: var(--md-sys-color-success);
+}
+
+.status-text.offline {
+    color: var(--md-sys-color-error);
+}
+
+.status-text.error {
+    color: var(--md-sys-color-warning);
+}
+
+.status-text.unknown {
+    color: var(--md-sys-color-outline);
 }
 
 .markdown-content {
-    padding: 10px 0;
-    border-top: 1px solid #eee;
-    margin-top: 10px;
+    padding: var(--md-sys-spacing-padding-md) 0;
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+    margin-top: var(--md-sys-spacing-margin-md);
+    color: var(--md-sys-color-on-surface);
 }
+
 .markdown-content h1,
 .markdown-content h2,
 .markdown-content h3 {
-    margin-top: 10px;
-    margin-bottom: 10px;
+    margin-top: var(--md-sys-spacing-margin-sm);
+    margin-bottom: var(--md-sys-spacing-margin-sm);
+    color: var(--md-sys-color-on-surface);
 }
+
 .markdown-content p {
-    margin-bottom: 10px;
+    margin-bottom: var(--md-sys-spacing-margin-sm);
+    line-height: var(--md-sys-typescale-line-height-default);
 }
+
 .markdown-content ul,
 .markdown-content ol {
-    margin-bottom: 10px;
+    margin-bottom: var(--md-sys-spacing-margin-sm);
+    padding-left: var(--md-sys-spacing-padding-lg);
 }
+
 .markdown-content pre {
-    background-color: #f4f4f4;
-    padding: 10px;
-    border-radius: 4px;
+    background-color: var(--md-sys-color-surface-variant);
+    padding: var(--md-sys-spacing-padding-md);
+    border-radius: var(--md-sys-shape-corner-medium);
     overflow-x: auto;
-    font-size: 0.9em;
+    font-size: var(--md-sys-typescale-body-small-size);
+    margin: var(--md-sys-spacing-margin-sm) 0;
 }
+
 .markdown-content code {
-    background-color: #f4f4f4;
-    padding: 2px 4px;
-    border-radius: 3px;
-    font-size: 0.9em;
+    background-color: var(--md-sys-color-surface-variant);
+    padding: var(--md-sys-spacing-padding-xs) var(--md-sys-spacing-padding-sm);
+    border-radius: var(--md-sys-shape-corner-small);
+    font-size: var(--md-sys-typescale-body-small-size);
+}
+
+.card-actions {
+    margin-top: var(--md-sys-spacing-margin-lg);
+    text-align: center;
+    padding-top: var(--md-sys-spacing-padding-md);
+    border-top: 1px solid var(--md-sys-color-outline-variant);
+}
+
+.empty-state {
+    text-align: center;
+    padding: var(--md-sys-spacing-padding-xxl);
+    grid-column: 1 / -1;
+}
+
+.empty-icon {
+    font-size: 48px;
+    color: var(--md-sys-color-outline);
+    margin-bottom: var(--md-sys-spacing-margin-lg);
+}
+
+.empty-title {
+    font-size: var(--md-sys-typescale-headline-small-size);
+    color: var(--md-sys-color-on-surface-variant);
+    margin-bottom: var(--md-sys-spacing-margin-md);
+}
+
+.empty-description {
+    font-size: var(--md-sys-typescale-body-large-size);
+    color: var(--md-sys-color-on-surface-variant);
+    margin-bottom: var(--md-sys-spacing-margin-lg);
+}
+
+.md-button {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    position: relative;
+    border: none;
+    border-radius: var(--md-sys-shape-corner-full);
+    cursor: pointer;
+    font-family: inherit;
+    text-decoration: none;
+    transition: 
+        background-color var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard),
+        color var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard),
+        box-shadow var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard),
+        transform var(--md-sys-motion-duration-short2) var(--md-sys-motion-easing-standard);
+    overflow: hidden;
+    user-select: none;
+}
+
+.md-button__label {
+    position: relative;
+    z-index: 1;
+    font-weight: var(--md-sys-typescale-weight-medium);
+    display: flex;
+    align-items: center;
+}
+
+.md-button--medium {
+    height: 40px;
+    padding: 0 var(--md-sys-spacing-padding-lg);
+    font-size: var(--md-sys-typescale-label-large-size);
+}
+
+.md-button--filled {
+    background-color: var(--md-sys-color-primary);
+    color: var(--md-sys-color-on-primary);
+    box-shadow: var(--md-sys-elevation-level1);
+}
+
+.md-button--filled:hover {
+    background-color: var(--md-sys-color-primary);
+    box-shadow: var(--md-sys-elevation-level2);
+    transform: translateY(-2px);
+}
+
+.md-button--filled:active {
+    transform: translateY(0);
+    box-shadow: var(--md-sys-elevation-level1);
+}
+
+.md-button--outlined {
+    background-color: transparent;
+    color: var(--md-sys-color-primary);
+    border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-button--outlined:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+    border-color: var(--md-sys-color-primary);
+}
+
+.md-button--text {
+    background-color: transparent;
+    color: var(--md-sys-color-primary);
+    border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-button--text:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+    border-color: var(--md-sys-color-primary);
+}
+
+.md-button--filled:focus {
+    outline: 2px solid var(--md-sys-color-primary);
+    outline-offset: 2px;
+}
+
+.md-button--filled:disabled {
+    background-color: var(--md-sys-color-on-surface);
+    color: var(--md-sys-color-surface);
+    opacity: 0.38;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.product-group-section {
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+@media (max-width: 768px) {
+    .dashboard-container {
+        padding: 1rem;
+    }
+    
+    .computer-grid {
+        grid-template-columns: 1fr;
+        gap: var(--md-sys-spacing-padding-md);
+    }
+    
+    .page-header h1 {
+        font-size: var(--md-sys-typescale-headline-medium-size);
+    }
+}
+
+.md-button--filled {
+    background-color: #1e3a5f !important;
+    color: #ffffff !important;
+}
+
+.md-button--filled .md-button__label {
+    color: #ffffff !important;
+}
+
+.md-button--filled .md-button__label i {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .md-button--filled {
+    background: linear-gradient(135deg, var(--md-sys-color-primary), var(--secondary-color)) !important;
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .md-button--filled .md-button__label {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .md-button--filled:hover {
+    background: linear-gradient(135deg, var(--md-sys-color-primary), var(--secondary-color)) !important;
+    box-shadow: var(--md-sys-elevation-level2);
+}
+
+[data-theme="dark"] .md-button--filled .md-button__label i {
+    color: #ffffff !important;
+}
+
+[data-theme="dark"] .md-input {
+    background-color: var(--md-sys-color-surface-variant);
+    color: var(--md-sys-color-on-surface);
+}
+
+[data-theme="dark"] .md-input:focus {
+    background-color: var(--md-sys-color-surface);
+    border-bottom: 2px solid var(--md-sys-color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .md-input:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+}
+
+[data-theme="dark"] select.md-input {
+    background-color: var(--md-sys-color-surface-variant);
+    color: var(--md-sys-color-on-surface);
+}
+
+[data-theme="dark"] select.md-input option {
+    background-color: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
 }
 </style>
 {% endblock %}
@@ -145,56 +463,138 @@
     <div class="row">
         <div class="col-12">
             <h3 class="mb-4">云电脑产品</h3>
-            <div class="computer-grid">
-                {% for product in public_hosts %}
-                <div class="computer-card">
-                    <div class="computer-card-header">
-                        <h5 class="mb-0">
-                            <span class="status-indicator status-{{ product.status }}"></span>
-                            {{ product.display_name }}
-                        </h5>
-                    </div>
-                    <div class="computer-card-body">
-                        <ul class="list-unstyled">
-                            <li><strong>状态:</strong> 
-                                {% if product.status == 'online' %}
-                                    <span class="text-success">在线</span>
-                                {% elif product.status == 'offline' %}
-                                    <span class="text-danger">离线</span>
-                                {% elif product.status == 'error' %}
-                                    <span class="text-warning">错误</span>
-                                {% else %}
-                                    <span class="text-secondary">未知</span>
-                                {% endif %}
-                            </li>
-                            <li><strong>自动审核:</strong> 
-                                {% if product.auto_approval %}
-                                    <span class="text-success">已启用</span>
-                                {% else %}
-                                    <span class="text-warning">未启用</span>
-                                {% endif %}
-                            </li>
-                        </ul>
-                        {% if product.display_description %}
-                        <div class="markdown-content">
-                            {{ product.display_description|markdown_filter }}
+            
+            <div class="filter-card">
+                <form method="get" class="filter-form">
+                    <div class="filter-grid">
+                        <div class="filter-item">
+                            <label class="filter-label">搜索</label>
+                            <input type="text" 
+                                   class="md-input" 
+                                   name="search" 
+                                   value="{{ search|default:'' }}"
+                                   placeholder="搜索产品名称或描述">
                         </div>
-                        {% endif %}
-                        <div class="mt-3 text-center">
-                            <a href="{% url 'operations:account_opening_create' %}?target_product={{ product.id }}" class="btn btn-sm btn-primary">
-                                <i class="fas fa-cloud"></i> 立即申请
+                        
+                        <div class="filter-item">
+                            <label class="filter-label">产品状态</label>
+                            <select class="md-input" name="status">
+                                <option value="">全部</option>
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label">产品分组</label>
+                            <select class="md-input" name="group">
+                                <option value="">全部</option>
+                                {% for group in product_groups %}
+                                <option value="{{ group.id }}" {% if group_filter|stringformat:"i" == group.id|stringformat:"i" %}selected{% endif %}>
+                                    {{ group.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label">自动审核</label>
+                            <select class="md-input" name="auto_approval">
+                                <option value="">全部</option>
+                                <option value="true" {% if auto_approval_filter == "true" %}selected{% endif %}>已启用</option>
+                                <option value="false" {% if auto_approval_filter == "false" %}selected{% endif %}>未启用</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-item" style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                            <button type="submit" class="md-button md-button--outlined md-button--medium">
+                                <span class="md-button__label">搜索</span>
+                            </button>
+                            <a href="{% url 'dashboard:index' %}" class="md-button md-button--text md-button--medium">
+                                <span class="md-button__label">重置</span>
                             </a>
                         </div>
                     </div>
-                </div>
-                {% empty %}
+                </form>
+            </div>
+            
+            {% if grouped_products %}
+                {% for group_data in grouped_products %}
+                    {% if group_data.group %}
+                        <div class="product-group-section">
+                            <h4 style="color: var(--md-sys-color-primary);">
+                                <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">folder</i>
+                                {{ group_data.group.name }}
+                            </h4>
+                            {% if group_data.group.description %}
+                                <p class="text-muted">{{ group_data.group.description }}</p>
+                            {% endif %}
+                        </div>
+                    {% else %}
+                        <div class="product-group-section">
+                            <h4 style="color: var(--md-sys-color-primary);">
+                                <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">widgets</i>
+                                其他产品
+                            </h4>
+                        </div>
+                    {% endif %}
+                    
+                    <div class="computer-grid">
+                        {% for product in group_data.products %}
+                        <div class="computer-card">
+                            <div class="computer-card-header">
+                                <h5 class="mb-0">
+                                    <span class="status-indicator status-{{ product.status }}"></span>
+                                    {{ product.display_name }}
+                                </h5>
+                            </div>
+                            <div class="computer-card-body">
+                                <ul class="list-unstyled">
+                                    <li><strong>状态:</strong> 
+                                        {% if product.status == 'online' %}
+                                            <span class="text-success">在线</span>
+                                        {% elif product.status == 'offline' %}
+                                            <span class="text-danger">离线</span>
+                                        {% elif product.status == 'error' %}
+                                            <span class="text-warning">错误</span>
+                                        {% else %}
+                                            <span class="text-secondary">未知</span>
+                                        {% endif %}
+                                    </li>
+                                    <li><strong>自动审核:</strong> 
+                                        {% if product.auto_approval %}
+                                            <span class="text-success">已启用</span>
+                                        {% else %}
+                                            <span class="text-warning">未启用</span>
+                                        {% endif %}
+                                    </li>
+                                </ul>
+                                {% if product.display_description %}
+                                <div class="markdown-content">
+                                    {{ product.display_description|markdown_filter }}
+                                </div>
+                                {% endif %}
+                                <div class="card-actions">
+                                    <a href="{% url 'operations:account_opening_create' %}?target_product={{ product.id }}" class="md-button md-button--filled md-button--medium">
+                                        <span class="md-button__label">
+                                            <i class="material-icons" style="font-size: 18px; margin-right: 8px;">cloud</i>
+                                            立即申请
+                                        </span>
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                        {% endfor %}
+                    </div>
+                {% endfor %}
+            {% else %}
                 <div class="col-12">
                     <div class="alert alert-info text-center">
                         暂无可用的云电脑主机
                     </div>
                 </div>
-                {% endfor %}
-            </div>
+            {% endif %}
         </div>
     </div>
 </div>
@@ -202,9 +602,7 @@
 
 {% block extra_js %}
 <script>
-// 页面加载完成后获取统计数据
 document.addEventListener('DOMContentLoaded', function() {
-    // 可以在这里添加一些动态统计数据获取的逻辑
     console.log('仪表盘页面加载完成');
 });
 </script>

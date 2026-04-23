@@ -465,6 +465,15 @@
                 
                 {{ form.target_product }}
 
+                <div id="disk-quota-section" class="form-section" style="display:none;">
+                    <h3 class="form-section-title">磁盘容量需求</h3>
+                    <p class="md-input__helper" style="margin-bottom:1rem;">
+                        以下磁盘允许额外申请容量，如需超出默认配额请填写需求容量（MB）
+                    </p>
+                    <div id="disk-quota-inputs"></div>
+                    {{ form.requested_disk_capacity }}
+                </div>
+
                 <div class="form-actions">
                     {% include 'components/button.html' with type="submit" variant="filled" text="提交申请并确认" size="large" %}
                     {% url 'operations:account_opening_list' as account_opening_list_url %}
@@ -477,5 +486,98 @@
 {% endblock %}
 
 {% block extra_js %}
+<script>
+(function() {
+    var productSelect = document.querySelector('#id_target_product');
+    var diskQuotaSection = document.getElementById('disk-quota-section');
+    var diskQuotaInputs = document.getElementById('disk-quota-inputs');
+    var hiddenInput = document.querySelector('input[name="requested_disk_capacity"]');
 
-{% endblock %}
+    var productDiskConfig = {};
+    {% if form.target_product.field.queryset %}
+    {% for product in form.target_product.field.queryset %}
+    productDiskConfig[{{ product.id }}] = {
+        enableDiskQuota: {{ product.enable_disk_quota|lower }},
+        allowExtraQuotaDisks: {{ product.allow_extra_quota_disks|safe }},
+        defaultDiskQuota: {{ product.default_disk_quota|safe }}
+    };
+    {% endfor %}
+    {% endif %}
+
+    function updateDiskQuotaSection() {
+        if (!productSelect) return;
+        var productId = productSelect.value;
+        if (!productId || !productDiskConfig[productId]) {
+            diskQuotaSection.style.display = 'none';
+            return;
+        }
+
+        var config = productDiskConfig[productId];
+        if (!config.enableDiskQuota || !config.allowExtraQuotaDisks || config.allowExtraQuotaDisks.length === 0) {
+            diskQuotaSection.style.display = 'none';
+            hiddenInput.value = '{}';
+            return;
+        }
+
+        diskQuotaSection.style.display = 'block';
+        diskQuotaInputs.innerHTML = '';
+
+        config.allowExtraQuotaDisks.forEach(function(disk) {
+            var defaultVal = config.defaultDiskQuota[disk] || 0;
+            var item = document.createElement('div');
+            item.className = 'disk-quota-item';
+            item.style.cssText = 'display:flex;align-items:center;margin-bottom:12px;';
+
+            var label = document.createElement('label');
+            label.textContent = disk;
+            label.style.cssText = 'width:60px;margin-right:8px;font-weight:bold;color:var(--md-sys-color-on-surface);';
+
+            var input = document.createElement('input');
+            input.type = 'number';
+            input.min = '0';
+            input.step = '1';
+            input.placeholder = '需求容量(MB)';
+            input.dataset.disk = disk;
+            input.style.cssText = 'width:200px;padding:12px 16px 8px;border:none;outline:none;' +
+                'background:var(--md-sys-color-surface-variant);' +
+                'border-radius:var(--md-sys-shape-corner-extra-large) var(--md-sys-shape-corner-extra-large) 0 0;' +
+                'font-size:var(--md-sys-typescale-body-large-size);color:var(--md-sys-color-on-surface);';
+
+            var hint = document.createElement('span');
+            hint.textContent = 'MB（默认: ' + defaultVal + 'MB）';
+            hint.style.cssText = 'margin-left:8px;color:var(--md-sys-color-on-surface-variant);' +
+                'font-size:var(--md-sys-typescale-body-small-size);';
+
+            item.appendChild(label);
+            item.appendChild(input);
+            item.appendChild(hint);
+            diskQuotaInputs.appendChild(item);
+        });
+    }
+
+    function updateHiddenInput() {
+        var data = {};
+        diskQuotaInputs.querySelectorAll('input[type="number"]').forEach(function(input) {
+            var disk = input.dataset.disk;
+            var val = input.value.trim();
+            if (val !== '' && !isNaN(val) && parseInt(val) > 0) {
+                data[disk] = parseInt(val);
+            }
+        });
+        if (hiddenInput) {
+            hiddenInput.value = JSON.stringify(data);
+        }
+    }
+
+    if (productSelect) {
+        productSelect.addEventListener('change', updateDiskQuotaSection);
+    }
+
+    if (diskQuotaInputs) {
+        diskQuotaInputs.addEventListener('input', updateHiddenInput);
+        diskQuotaInputs.addEventListener('change', updateHiddenInput);
+    }
+
+    updateDiskQuotaSection();
+})();
+</script>

@@ -8,7 +8,7 @@ from django.views import View
 from django.views.generic import TemplateView
 from django.contrib.auth.mixins import LoginRequiredMixin, UserPassesTestMixin
 from django.http import JsonResponse
-from django.db.models import Count
+from django.db.models import Count, Q
 from django.utils import timezone
 from datetime import timedelta
 from django.contrib.auth import get_user_model
@@ -40,16 +40,37 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         """获取仪表盘上下文数据"""
         context = super().get_context_data(**kwargs)
 
-        # 获取所有启用的产品组，按显示顺序排序
         product_groups = ProductGroup.objects.filter(is_active=True).order_by(
             "display_order", "name"
         )
 
-        all_products = list(
-            Product.objects.filter(is_available=True)
-            .select_related("host", "product_group")
-            .order_by("-created_at")
+        products_qs = Product.objects.filter(is_available=True).select_related(
+            "host", "product_group"
         )
+
+        search = self.request.GET.get("search", "")
+        if search:
+            products_qs = products_qs.filter(
+                Q(display_name__icontains=search)
+                | Q(display_description__icontains=search)
+                | Q(name__icontains=search)
+            )
+
+        status_filter = self.request.GET.get("status", "")
+        if status_filter:
+            products_qs = products_qs.filter(host__status=status_filter)
+
+        group_filter = self.request.GET.get("group", "")
+        if group_filter:
+            products_qs = products_qs.filter(product_group_id=group_filter)
+
+        auto_approval_filter = self.request.GET.get("auto_approval", "")
+        if auto_approval_filter == "true":
+            products_qs = products_qs.filter(auto_approval=True)
+        elif auto_approval_filter == "false":
+            products_qs = products_qs.filter(auto_approval=False)
+
+        all_products = list(products_qs.order_by("-created_at"))
 
         grouped_products: list[dict[str, Any]] = []
         for group in product_groups:
@@ -67,14 +88,19 @@ class DashboardView(LoginRequiredMixin, TemplateView):
 
         context["public_hosts"] = all_products
 
-        # 获取开户统计信息
+        context["product_groups"] = product_groups
+        context["status_choices"] = Host._meta.get_field("status").choices
+        context["search"] = search
+        context["status_filter"] = status_filter
+        context["group_filter"] = group_filter
+        context["auto_approval_filter"] = auto_approval_filter
+
         context["account_requests_pending"] = AccountOpeningRequest.objects.filter(
             status="pending"
         ).count()
         context["cloud_users_total"] = CloudComputerUser.objects.count()
 
-        # 对于管理员，显示所有申请；对于普通用户，只显示自己的申请
-        if self.request.user.is_staff or self.request.user.is_superuser:  # type: ignore
+        if self.request.user.is_staff or self.request.user.is_superuser:
             context["account_requests_recent"] = (
                 AccountOpeningRequest.objects.all().order_by("-created_at")[:5]
             )
@@ -83,7 +109,6 @@ class DashboardView(LoginRequiredMixin, TemplateView):
                 applicant=self.request.user
             ).order_by("-created_at")[:5]
 
-        # 记录用户访问活动
         UserActivity.objects.create(
             user=self.request.user,
             activity_type="dashboard_view",

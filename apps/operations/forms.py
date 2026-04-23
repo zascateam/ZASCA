@@ -1,6 +1,7 @@
 """
 操作记录表单
 """
+import json
 from django import forms
 from django.utils.translation import gettext_lazy as _
 
@@ -89,11 +90,18 @@ class AccountOpeningRequestForm(forms.ModelForm):
         help_text=_('请选择您要申请的产品')
     )
 
+    requested_disk_capacity = forms.CharField(
+        required=False,
+        widget=forms.HiddenInput(),
+        label=_('需求磁盘容量'),
+        help_text=_('额外申请的磁盘容量（MB）')
+    )
+
     class Meta:
         model = AccountOpeningRequest
         fields = [
             'username', 'user_fullname', 'user_description',
-            'target_product'
+            'target_product', 'requested_disk_capacity'
         ]
 
     def __init__(self, *args, **kwargs):
@@ -114,6 +122,31 @@ class AccountOpeningRequestForm(forms.ModelForm):
             self.fields['target_product'].initial = target_product
             # 将字段设为隐藏
             self.fields['target_product'].widget = forms.HiddenInput()
+
+    def clean_requested_disk_capacity(self):
+        data = self.cleaned_data.get('requested_disk_capacity', '{}')
+        if not data:
+            return {}
+        if isinstance(data, dict):
+            return data
+        try:
+            parsed = json.loads(data)
+        except json.JSONDecodeError:
+            raise forms.ValidationError('磁盘容量格式无效')
+        if not isinstance(parsed, dict):
+            raise forms.ValidationError('磁盘容量必须为字典格式')
+        for disk, value in parsed.items():
+            try:
+                val = int(value)
+                if val < 0:
+                    raise forms.ValidationError(
+                        f'磁盘 {disk} 的容量不能为负数'
+                    )
+            except (ValueError, TypeError):
+                raise forms.ValidationError(
+                    f'磁盘 {disk} 的容量必须为数字'
+                )
+        return parsed
 
 
 class AccountOpeningRequestFilterForm(forms.Form):
@@ -155,11 +188,11 @@ class CloudComputerUserFilterForm(forms.Form):
         label=_('状态')
     )
     
-    host = forms.ModelChoiceField(
+    product = forms.ModelChoiceField(
         required=False,
-        queryset=Host.objects.all(),
+        queryset=None,
         widget=forms.Select(attrs={'class': 'form-control'}),
-        label=_('主机')
+        label=_('产品')
     )
     
     search = forms.CharField(
@@ -170,3 +203,8 @@ class CloudComputerUserFilterForm(forms.Form):
         }),
         label=_('搜索')
     )
+    
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        from .models import Product
+        self.fields['product'].queryset = Product.objects.all()

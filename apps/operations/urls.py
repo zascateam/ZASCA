@@ -27,4 +27,8 @@ urlpatterns = [
     path('my-cloud-computers/', views.MyCloudComputersView.as_view(), name='my_cloud_computers'),
     path('my-cloud-computers/<int:pk>/', views.my_cloud_computer_detail, name='my_cloud_computer_detail'),
     path('my-cloud-computers/<int:pk>/get-password/', views.get_password_and_burn, name='get_password_and_burn'),
+
+    # 磁盘配额相关API
+    path('api/product/<int:product_id>/disk-config/', views.get_product_disk_config, name='product_disk_config'),
+    path('api/host/<int:host_id>/disk-info/', views.get_host_disk_info, name='host_disk_info'),
 ]

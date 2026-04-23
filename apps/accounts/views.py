@@ -12,10 +12,6 @@ from django.views.decorators.http import require_http_methods
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_protect, csrf_exempt
 from django.core.cache import cache
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
-import random
 from PIL import Image
 import os
 
@@ -452,93 +448,69 @@ def send_register_email_code(request):
             status=400
         )
 
-    # generate code and store in cache
     code = _gen_code(6)
     cache_key = f'register_email_code:{email}'
-    cache.set(cache_key, code, timeout=10 * 60)  # 10 minutes
+    cache.set(cache_key, code, timeout=10 * 60)
 
-    # send email using direct SMTP connection
     subject = 'ZASCA 注册验证码'
     message_body = f'您的注册验证码是: {code}，有效期10分钟。'
-    from_email = cfg.smtp_from_email
-    
-    smtp_ready = (
-        cfg.smtp_host and cfg.smtp_port and
-        cfg.smtp_username and cfg.smtp_password and cfg.smtp_from_email
-    )
-    if smtp_ready:
-        # Create HTML email template for registration
-        # (never a test email in this context)
-        html_body = f'''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>{subject}</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6;
-                    color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto;
-                    padding: 20px; border: 1px solid #eee; }}
-                .header {{ background-color: #f8f9fa; padding: 20px;
-                    text-align: center; border-bottom: 1px solid #dee2e6; }}
-                .content {{ padding: 20px 0; }}
-                .code {{ font-size: 24px; font-weight: bold; color: #007bff;
-                    letter-spacing: 5px; text-align: center; margin: 20px 0; }}
-                .footer {{ padding: 20px 0; text-align: center;
-                    border-top: 1px solid #dee2e6; color: #6c757d;
-                    font-size: 12px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h2>ZASCA 验证码服务</h2>
-                </div>
-                <div class="content">
-                    <p>您好！</p>
-                    <p>感谢您注册ZASCA账户。</p>
-                    <p>您的验证码是：</p>
-                    <div class="code">{code}</div>
-                    <p>此验证码将在10分钟后失效，请及时使用。</p>
-                    <p>如果您没有进行相关操作，请忽略此邮件。</p>
-                </div>
-                <div class="footer">
-                    <p>© 2026 ZASCA. All rights reserved.</p>
-                    <p>此邮件由系统自动发送，请勿回复。</p>
-                </div>
+    html_body = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>{subject}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6;
+                color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto;
+                padding: 20px; border: 1px solid #eee; }}
+            .header {{ background-color: #f8f9fa; padding: 20px;
+                text-align: center; border-bottom: 1px solid #dee2e6; }}
+            .content {{ padding: 20px 0; }}
+            .code {{ font-size: 24px; font-weight: bold; color: #007bff;
+                letter-spacing: 5px; text-align: center; margin: 20px 0; }}
+            .footer {{ padding: 20px 0; text-align: center;
+                border-top: 1px solid #dee2e6; color: #6c757d;
+                font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>ZASCA 验证码服务</h2>
             </div>
-        </body>
-        </html>
-        '''
-        
-        # 使用配置的SMTP设置直接发送HTML邮件
-        msg = MIMEMultipart('alternative')  # 使用alternative类型支持HTML和纯文本
-        msg['From'] = from_email
-        msg['To'] = email
-        msg['Subject'] = subject
-        
-        # 添加纯文本版本作为备选
-        text_body = message_body
-        part1 = MIMEText(text_body, 'plain', 'utf-8')
-        part2 = MIMEText(html_body, 'html', 'utf-8')
-        
-        msg.attach(part1)
-        msg.attach(part2)
-        
-        # 根据配置决定是否使用STARTTLS
-        server = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port)
-        server.ehlo()
+            <div class="content">
+                <p>您好！</p>
+                <p>感谢您注册ZASCA账户。</p>
+                <p>您的验证码是：</p>
+                <div class="code">{code}</div>
+                <p>此验证码将在10分钟后失效，请及时使用。</p>
+                <p>如果您没有进行相关操作，请忽略此邮件。</p>
+            </div>
+            <div class="footer">
+                <p>© 2026 ZASCA. All rights reserved.</p>
+                <p>此邮件由系统自动发送，请勿回复。</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
 
-        if cfg.smtp_use_tls:
-            server.starttls()
-            server.ehlo()
-
-        server.login(cfg.smtp_username, cfg.smtp_password)
-        text = msg.as_string()
-        server.sendmail(from_email, [email], text)
-        server.quit()
-    else:
+    from .email_service import EmailService
+    try:
+        email_service = EmailService.from_system_config(cfg)
+        email_service.send_email(
+            to_emails=[email],
+            subject=subject,
+            text_body=message_body,
+            html_body=html_body,
+        )
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).error(
+            f'发送注册验证码邮件失败: {str(e)}', exc_info=True
+        )
         return JsonResponse(
             {'status': 'error', 'message': 'SMTP配置不完整'},
             status=500
@@ -729,7 +701,6 @@ def send_forgot_password_email_code(request):
     """
     email = request.POST.get('email')
 
-    # Validate email
     if not email:
         return JsonResponse(
             {'status': 'error', 'message': '缺少email'},
@@ -750,18 +721,6 @@ def send_forgot_password_email_code(request):
 
     user_exists = User.objects.filter(email=email).exists()
 
-    from apps.dashboard.models import SystemConfig
-    cfg = SystemConfig.get_config()
-
-    from .captcha_service import validate_captcha
-    is_valid, error_msg = validate_captcha(request, scene='email')
-
-    if not is_valid:
-        return JsonResponse(
-            {'status': 'error', 'message': error_msg},
-            status=400
-        )
-
     if not user_exists:
         return JsonResponse({'status': 'ok'})
 
@@ -769,93 +728,73 @@ def send_forgot_password_email_code(request):
     cache_key = f'forgot_password_email_code:{email}'
     cache.set(cache_key, code, timeout=10 * 60)
 
-    # send email using direct SMTP connection
-    subject = 'ZASCA 重置密码验证码'
-    message_body = f'您的重置密码验证码是: {code}，有效期10分钟。'
-    from_email = cfg.smtp_from_email
-    
     import os
     if os.environ.get('ZASCA_DEMO', '').lower() == '1':
-        # 在DEMO模式下，模拟发送邮件成功但不实际发送
-        logger = __import__('logging').getLogger(__name__)
-        logger.info(
+        import logging as _logging
+        _logging.getLogger(__name__).info(
             f'DEMO模式: 模拟发送忘记密码验证码邮件至 {email}'
         )
-    elif (
-        cfg.smtp_host and cfg.smtp_port and
-        cfg.smtp_username and cfg.smtp_password and cfg.smtp_from_email
-    ):
-        # Create HTML email template for password reset
-        html_body = f'''
-        <!DOCTYPE html>
-        <html>
-        <head>
-            <meta charset="utf-8">
-            <title>{subject}</title>
-            <style>
-                body {{ font-family: Arial, sans-serif; line-height: 1.6;
-                    color: #333; }}
-                .container {{ max-width: 600px; margin: 0 auto;
-                    padding: 20px; border: 1px solid #eee; }}
-                .header {{ background-color: #f8f9fa; padding: 20px;
-                    text-align: center; border-bottom: 1px solid #dee2e6; }}
-                .content {{ padding: 20px 0; }}
-                .code {{ font-size: 24px; font-weight: bold; color: #007bff;
-                    letter-spacing: 5px; text-align: center; margin: 20px 0; }}
-                .footer {{ padding: 20px 0; text-align: center;
-                    border-top: 1px solid #dee2e6; color: #6c757d;
-                    font-size: 12px; }}
-            </style>
-        </head>
-        <body>
-            <div class="container">
-                <div class="header">
-                    <h2>ZASCA 验证码服务</h2>
-                </div>
-                <div class="content">
-                    <p>您好！</p>
-                    <p>您正在重置ZASCA账户的密码。</p>
-                    <p>您的验证码是：</p>
-                    <div class="code">{code}</div>
-                    <p>此验证码将在10分钟后失效，请及时使用。</p>
-                    <p>如果您没有进行相关操作，请忽略此邮件。</p>
-                </div>
-                <div class="footer">
-                    <p>© 2026 ZASCA. All rights reserved.</p>
-                    <p>此邮件由系统自动发送，请勿回复。</p>
-                </div>
+        return JsonResponse({'status': 'ok'})
+
+    subject = 'ZASCA 重置密码验证码'
+    message_body = f'您的重置密码验证码是: {code}，有效期10分钟。'
+    html_body = f'''
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="utf-8">
+        <title>{subject}</title>
+        <style>
+            body {{ font-family: Arial, sans-serif; line-height: 1.6;
+                color: #333; }}
+            .container {{ max-width: 600px; margin: 0 auto;
+                padding: 20px; border: 1px solid #eee; }}
+            .header {{ background-color: #f8f9fa; padding: 20px;
+                text-align: center; border-bottom: 1px solid #dee2e6; }}
+            .content {{ padding: 20px 0; }}
+            .code {{ font-size: 24px; font-weight: bold; color: #007bff;
+                letter-spacing: 5px; text-align: center; margin: 20px 0; }}
+            .footer {{ padding: 20px 0; text-align: center;
+                border-top: 1px solid #dee2e6; color: #6c757d;
+                font-size: 12px; }}
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <div class="header">
+                <h2>ZASCA 验证码服务</h2>
             </div>
-        </body>
-        </html>
-        '''
-        
-        # 使用配置的SMTP设置直接发送HTML邮件
-        msg = MIMEMultipart('alternative')  # 使用alternative类型支持HTML和纯文本
-        msg['From'] = from_email
-        msg['To'] = email
-        msg['Subject'] = subject
-        
-        # 添加纯文本版本作为备选
-        text_body = message_body
-        part1 = MIMEText(text_body, 'plain', 'utf-8')
-        part2 = MIMEText(html_body, 'html', 'utf-8')
-        
-        msg.attach(part1)
-        msg.attach(part2)
-        
-        # 根据配置决定是否使用STARTTLS
-        server = smtplib.SMTP(cfg.smtp_host, cfg.smtp_port)
-        server.ehlo()
+            <div class="content">
+                <p>您好！</p>
+                <p>您正在重置ZASCA账户的密码。</p>
+                <p>您的验证码是：</p>
+                <div class="code">{code}</div>
+                <p>此验证码将在10分钟后失效，请及时使用。</p>
+                <p>如果您没有进行相关操作，请忽略此邮件。</p>
+            </div>
+            <div class="footer">
+                <p>© 2026 ZASCA. All rights reserved.</p>
+                <p>此邮件由系统自动发送，请勿回复。</p>
+            </div>
+        </div>
+    </body>
+    </html>
+    '''
 
-        if cfg.smtp_use_tls:
-            server.starttls()
-            server.ehlo()
-
-        server.login(cfg.smtp_username, cfg.smtp_password)
-        text = msg.as_string()
-        server.sendmail(from_email, [email], text)
-        server.quit()
-    else:
+    from .email_service import EmailService
+    try:
+        email_service = EmailService.from_system_config(cfg)
+        email_service.send_email(
+            to_emails=[email],
+            subject=subject,
+            text_body=message_body,
+            html_body=html_body,
+        )
+    except Exception as e:
+        import logging as _logging
+        _logging.getLogger(__name__).error(
+            f'发送忘记密码验证码邮件失败: {str(e)}', exc_info=True
+        )
         return JsonResponse(
             {'status': 'error', 'message': 'SMTP配置不完整'},
             status=500

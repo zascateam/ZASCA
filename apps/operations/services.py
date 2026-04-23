@@ -43,6 +43,31 @@ def execute_account_opening(account_request):
             result = client.create_user(account_request.username, password)
             
             if result.status_code == 0:
+                # 计算用户磁盘配额
+                user_disk_quota = {}
+                product = account_request.target_product
+                if product.enable_disk_quota and product.default_disk_quota:
+                    user_disk_quota = dict(product.default_disk_quota)
+                    if account_request.requested_disk_capacity:
+                        for disk, capacity in account_request.requested_disk_capacity.items():
+                            if disk in product.allow_extra_quota_disks:
+                                user_disk_quota[disk] = capacity
+
+                # 设置磁盘配额
+                if user_disk_quota:
+                    try:
+                        from utils.disk_quota import set_user_disk_quotas
+                        quota_result = set_user_disk_quotas(
+                            client, account_request.username, user_disk_quota
+                        )
+                        if not quota_result['success']:
+                            logger.warning(
+                                f"磁盘配额设置部分失败: "
+                                f"{quota_result.get('errors', [])}"
+                            )
+                    except Exception as e:
+                        logger.error(f"磁盘配额设置失败: {str(e)}")
+
                 # 成功创建用户
                 cloud_user, created = CloudComputerUser.objects.get_or_create(
                     username=account_request.username,
@@ -52,7 +77,8 @@ def execute_account_opening(account_request):
                         'email': account_request.user_email,
                         'description': account_request.user_description,
                         'created_from_request': account_request,
-                        'initial_password': password
+                        'initial_password': password,
+                        'disk_quota': user_disk_quota,
                     }
                 )
                 

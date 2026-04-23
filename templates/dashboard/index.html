@@ -6,7 +6,6 @@
 
 {% block extra_css %}
 <style>
-/* 仪表盘MD3样式 */
 .dashboard-container {
     max-width: 1200px;
     margin: 0 auto;
@@ -32,7 +31,84 @@
     margin-bottom: var(--md-sys-spacing-margin-xl);
 }
 
-/* 产品网格布局 */
+.filter-card {
+    background: var(--md-sys-color-surface);
+    border-radius: var(--md-sys-shape-corner-medium);
+    box-shadow: var(--md-sys-elevation-1);
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+@media (max-width: 768px) {
+    .filter-card {
+        padding: 1rem;
+        margin-bottom: 1.5rem;
+    }
+}
+
+.filter-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    align-items: end;
+}
+
+@media (max-width: 768px) {
+    .filter-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+    }
+    
+    .filter-item {
+        min-width: unset;
+    }
+}
+
+.filter-item {
+    display: flex;
+    flex-direction: column;
+}
+
+.filter-label {
+    font-size: var(--md-sys-typescale-label-large-font-size);
+    font-weight: var(--md-sys-typescale-label-large-font-weight);
+    color: var(--md-sys-color-on-surface-variant);
+    margin-bottom: 0.5rem;
+}
+
+.md-input {
+    width: 100%;
+    border: none;
+    outline: none;
+    background: var(--md-sys-color-surface-variant);
+    font-family: inherit;
+    font-size: var(--md-sys-typescale-body-large-size);
+    color: var(--md-sys-color-on-surface);
+    padding: 16px;
+    box-sizing: border-box;
+    border-radius: var(--md-sys-shape-corner-extra-large);
+}
+
+.md-input:focus {
+    background-color: var(--md-sys-color-surface);
+    border-bottom: 2px solid var(--md-sys-color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.md-input:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.04);
+}
+
+select.md-input {
+    appearance: none;
+    background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='currentColor' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3e%3cpolyline points='6,9 12,15 18,9'%3e%3c/polyline%3e%3c/svg%3e");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    background-size: 16px;
+    padding-right: 36px;
+    cursor: pointer;
+}
+
 .computer-grid {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
@@ -40,7 +116,6 @@
     margin-top: var(--md-sys-spacing-margin-lg);
 }
 
-/* MD3产品卡片 */
 .computer-card {
     background: var(--md-sys-color-surface);
     border-radius: var(--md-sys-shape-corner-large);
@@ -72,7 +147,6 @@
     align-items: center;
 }
 
-/* 状态指示器 */
 .status-indicator {
     display: inline-block;
     width: 12px;
@@ -97,7 +171,6 @@
     background-color: var(--md-sys-color-outline);
 }
 
-/* 卡片主体 */
 .computer-card-body {
     padding: var(--md-sys-spacing-padding-lg);
 }
@@ -148,7 +221,6 @@
     color: var(--md-sys-color-outline);
 }
 
-/* Markdown内容样式 */
 .markdown-content {
     padding: var(--md-sys-spacing-padding-md) 0;
     border-top: 1px solid var(--md-sys-color-outline-variant);
@@ -191,7 +263,6 @@
     font-size: var(--md-sys-typescale-body-small-size);
 }
 
-/* 操作按钮区域 */
 .card-actions {
     margin-top: var(--md-sys-spacing-margin-lg);
     text-align: center;
@@ -199,7 +270,6 @@
     border-top: 1px solid var(--md-sys-color-outline-variant);
 }
 
-/* 空状态 */
 .empty-state {
     text-align: center;
     padding: var(--md-sys-spacing-padding-xxl);
@@ -224,7 +294,6 @@
     margin-bottom: var(--md-sys-spacing-margin-lg);
 }
 
-/* MD3 按钮样式 */
 .md-button {
     display: inline-flex;
     align-items: center;
@@ -275,13 +344,33 @@
     box-shadow: var(--md-sys-elevation-level1);
 }
 
-/* 按钮焦点状态 */
+.md-button--outlined {
+    background-color: transparent;
+    color: var(--md-sys-color-primary);
+    border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-button--outlined:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+    border-color: var(--md-sys-color-primary);
+}
+
+.md-button--text {
+    background-color: transparent;
+    color: var(--md-sys-color-primary);
+    border: 1px solid var(--md-sys-color-outline);
+}
+
+.md-button--text:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+    border-color: var(--md-sys-color-primary);
+}
+
 .md-button--filled:focus {
     outline: 2px solid var(--md-sys-color-primary);
     outline-offset: 2px;
 }
 
-/* 按钮禁用状态 */
 .md-button--filled:disabled {
     background-color: var(--md-sys-color-on-surface);
     color: var(--md-sys-color-surface);
@@ -291,7 +380,11 @@
     box-shadow: none;
 }
 
-/* 响应式设计 */
+.product-group-section {
+    margin-top: 1rem;
+    margin-bottom: 1.5rem;
+}
+
 @media (max-width: 768px) {
     .dashboard-container {
         padding: 1rem;
@@ -307,7 +400,6 @@
     }
 }
 
-/* 浅色模式适配 - 确保按钮文字可见 */
 .md-button--filled {
     background-color: #1e3a5f !important;
     color: #ffffff !important;
@@ -321,7 +413,6 @@
     color: #ffffff !important;
 }
 
-/* 深色模式适配 */
 [data-theme="dark"] .md-button--filled {
     background: linear-gradient(135deg, var(--md-sys-color-primary), var(--secondary-color)) !important;
     color: #ffffff !important;
@@ -339,6 +430,31 @@
 [data-theme="dark"] .md-button--filled .md-button__label i {
     color: #ffffff !important;
 }
+
+[data-theme="dark"] .md-input {
+    background-color: var(--md-sys-color-surface-variant);
+    color: var(--md-sys-color-on-surface);
+}
+
+[data-theme="dark"] .md-input:focus {
+    background-color: var(--md-sys-color-surface);
+    border-bottom: 2px solid var(--md-sys-color-primary);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+[data-theme="dark"] .md-input:hover {
+    background-color: rgba(var(--primary-color-rgb), 0.08);
+}
+
+[data-theme="dark"] select.md-input {
+    background-color: var(--md-sys-color-surface-variant);
+    color: var(--md-sys-color-on-surface);
+}
+
+[data-theme="dark"] select.md-input option {
+    background-color: var(--md-sys-color-surface);
+    color: var(--md-sys-color-on-surface);
+}
 </style>
 {% endblock %}
 
@@ -348,21 +464,76 @@
         <div class="col-12">
             <h3 class="mb-4">云电脑产品</h3>
             
+            <div class="filter-card">
+                <form method="get" class="filter-form">
+                    <div class="filter-grid">
+                        <div class="filter-item">
+                            <label class="filter-label">搜索</label>
+                            <input type="text" 
+                                   class="md-input" 
+                                   name="search" 
+                                   value="{{ search|default:'' }}"
+                                   placeholder="搜索产品名称或描述">
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label">产品状态</label>
+                            <select class="md-input" name="status">
+                                <option value="">全部</option>
+                                {% for value, label in status_choices %}
+                                <option value="{{ value }}" {% if status_filter == value %}selected{% endif %}>{{ label }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label">产品分组</label>
+                            <select class="md-input" name="group">
+                                <option value="">全部</option>
+                                {% for group in product_groups %}
+                                <option value="{{ group.id }}" {% if group_filter|stringformat:"i" == group.id|stringformat:"i" %}selected{% endif %}>
+                                    {{ group.name }}
+                                </option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        
+                        <div class="filter-item">
+                            <label class="filter-label">自动审核</label>
+                            <select class="md-input" name="auto_approval">
+                                <option value="">全部</option>
+                                <option value="true" {% if auto_approval_filter == "true" %}selected{% endif %}>已启用</option>
+                                <option value="false" {% if auto_approval_filter == "false" %}selected{% endif %}>未启用</option>
+                            </select>
+                        </div>
+                        
+                        <div class="filter-item" style="display: flex; gap: 0.5rem; align-items: flex-end;">
+                            <button type="submit" class="md-button md-button--outlined md-button--medium">
+                                <span class="md-button__label">搜索</span>
+                            </button>
+                            <a href="{% url 'dashboard:index' %}" class="md-button md-button--text md-button--medium">
+                                <span class="md-button__label">重置</span>
+                            </a>
+                        </div>
+                    </div>
+                </form>
+            </div>
+            
             {% if grouped_products %}
                 {% for group_data in grouped_products %}
                     {% if group_data.group %}
-                        <div class="product-group-section mb-4">
-                            <h4 class="mb-3" style="color: var(--md-sys-color-primary);">
+                        <div class="product-group-section">
+                            <h4 style="color: var(--md-sys-color-primary);">
                                 <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">folder</i>
                                 {{ group_data.group.name }}
                             </h4>
                             {% if group_data.group.description %}
-                                <p class="text-muted mb-3">{{ group_data.group.description }}</p>
+                                <p class="text-muted">{{ group_data.group.description }}</p>
                             {% endif %}
                         </div>
                     {% else %}
-                        <div class="product-group-section mb-4">
-                            <h4 class="mb-3" style="color: var(--md-sys-color-primary);">
+                        <div class="product-group-section">
+                            <h4 style="color: var(--md-sys-color-primary);">
                                 <i class="material-icons" style="vertical-align: middle; margin-right: 8px;">widgets</i>
                                 其他产品
                             </h4>
@@ -431,9 +602,7 @@
 
 {% block extra_js %}
 <script>
-// 页面加载完成后获取统计数据
 document.addEventListener('DOMContentLoaded', function() {
-    // 可以在这里添加一些动态统计数据获取的逻辑
     console.log('仪表盘页面加载完成');
 });
 </script>

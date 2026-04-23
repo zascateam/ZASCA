@@ -7,11 +7,13 @@
 - 提供商只能看到自己产品下的云电脑用户
 """
 
+import json
 from typing import Any, Sequence
 from django.contrib import admin
 from django.utils import timezone
 from django.contrib.auth import get_user_model
 from django.http import HttpRequest
+from django import forms
 
 from .models import (
     SystemTask,
@@ -68,6 +70,347 @@ class ProviderDataIsolationMixin(admin.ModelAdmin):
             return self.get_queryset_for_provider(request, qs)
 
         return qs
+
+
+class DiskQuotaWidget(forms.Widget):
+    """
+    磁盘配额自定义Widget
+
+    为每个磁盘生成一个数字输入框，用于设置配额大小（MB）
+    """
+
+    template_name = 'admin/widgets/disk_quota_widget.html'
+
+    def __init__(self, attrs=None):
+        super().__init__(attrs)
+
+    def format_value(self, value):
+        if value is None:
+            return {}
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return {}
+        return value
+
+    def render(self, name, value, attrs=None, renderer=None):
+        value = self.format_value(value)
+        if not isinstance(value, dict):
+            value = {}
+
+        disks = self.attrs.get('disks', [])
+        if not disks:
+            disks = list(value.keys()) if value else []
+
+        input_html = ''
+        for disk in disks:
+            disk_value = value.get(disk, '')
+            input_html += (
+                f'<div class="disk-quota-item" '
+                f'style="display:flex;align-items:center;'
+                f'margin-bottom:8px;">'
+                f'<label for="id_{name}_{disk}" '
+                f'style="width:60px;margin-right:8px;'
+                f'font-weight:bold;">{disk}</label>'
+                f'<input type="number" id="id_{name}_{disk}" '
+                f'name="{name}_{disk}" value="{disk_value}" '
+                f'min="0" step="1" '
+                f'style="width:150px;padding:6px 8px;" '
+                f'placeholder="配额(MB)" />'
+                f'<span style="margin-left:8px;color:#666;">MB</span>'
+                f'</div>'
+            )
+
+        if not disks:
+            input_html = (
+                '<p style="color:#999;">请先选择关联主机并保存，'
+                '系统将自动读取磁盘信息</p>'
+            )
+
+        hidden_input = (
+            f'<input type="hidden" id="id_{name}" '
+            f'name="{name}" value=\''
+            f'{json.dumps(value)}\' />'
+        )
+
+        script = f'''
+<script>
+(function() {{
+    var container = document.querySelector(
+        '.disk-quota-container[data-field="{name}"]'
+    );
+    if (!container) return;
+
+    function updateHidden() {{
+        var data = {{}};
+        container.querySelectorAll(
+            '.disk-quota-item input[type="number"]'
+        ).forEach(function(input) {{
+            var disk = input.name.replace('{name}_', '');
+            var val = input.value.trim();
+            if (val !== '' && !isNaN(val)) {{
+                data[disk] = parseInt(val);
+            }}
+        }});
+        container.querySelector(
+            'input[type="hidden"][name="{name}"]'
+        ).value = JSON.stringify(data);
+    }}
+
+    container.querySelectorAll(
+        'input[type="number"]'
+    ).forEach(function(input) {{
+        input.addEventListener('change', updateHidden);
+        input.addEventListener('input', updateHidden);
+    }});
+}})();
+</script>'''
+
+        return (
+            f'<div class="disk-quota-container" '
+            f'data-field="{name}">'
+            f'{input_html}{hidden_input}</div>{script}'
+        )
+
+    def value_from_datadict(self, data, files, name):
+        hidden_value = data.get(name, '{}')
+        try:
+            return json.loads(hidden_value)
+        except json.JSONDecodeError:
+            result = {}
+            prefix = f'{name}_'
+            for key, val in data.items():
+                if key.startswith(prefix):
+                    disk = key[len(prefix):]
+                    try:
+                        result[disk] = int(val)
+                    except (ValueError, TypeError):
+                        pass
+            return result
+
+
+class DiskSelectionWidget(forms.Widget):
+    """
+    磁盘选择Widget
+
+    左右双栏选择框，左边为可用磁盘，右边为已选磁盘
+    """
+
+    template_name = 'admin/widgets/disk_selection_widget.html'
+
+    def __init__(self, attrs=None):
+        super().__init__(attrs)
+
+    def format_value(self, value):
+        if value is None:
+            return []
+        if isinstance(value, str):
+            try:
+                return json.loads(value)
+            except json.JSONDecodeError:
+                return []
+        return value
+
+    def render(self, name, value, attrs=None, renderer=None):
+        value = self.format_value(value)
+        if not isinstance(value, list):
+            value = []
+
+        all_disks = self.attrs.get('disks', [])
+        available = [d for d in all_disks if d not in value]
+
+        available_options = ''.join(
+            f'<option value="{d}">{d}</option>' for d in available
+        )
+        selected_options = ''.join(
+            f'<option value="{d}">{d}</option>' for d in value
+        )
+
+        hidden_input = (
+            f'<input type="hidden" id="id_{name}" '
+            f'name="{name}" value=\''
+            f'{json.dumps(value)}\' />'
+        )
+
+        html = f'''
+<div class="disk-selection-container" data-field="{name}"
+     style="display:flex;align-items:center;gap:12px;">
+    <div style="flex:1;">
+        <label style="display:block;margin-bottom:4px;"
+        >可用磁盘</label>
+        <select id="id_{name}_available" multiple
+                style="width:100%;height:120px;
+                padding:4px;">
+            {available_options}
+        </select>
+    </div>
+    <div style="display:flex;flex-direction:column;gap:4px;">
+        <button type="button" class="disk-select-add"
+                style="padding:4px 12px;cursor:pointer;"
+        >&rarr;</button>
+        <button type="button" class="disk-select-remove"
+                style="padding:4px 12px;cursor:pointer;"
+        >&larr;</button>
+    </div>
+    <div style="flex:1;">
+        <label style="display:block;margin-bottom:4px;"
+        >已选磁盘</label>
+        <select id="id_{name}_selected" multiple
+                style="width:100%;height:120px;
+                padding:4px;">
+            {selected_options}
+        </select>
+    </div>
+</div>
+{hidden_input}
+<script>
+(function() {{
+    var container = document.querySelector(
+        '.disk-selection-container[data-field="{name}"]'
+    );
+    if (!container) return;
+
+    var availSel = container.querySelector(
+        '#id_{name}_available'
+    );
+    var selectedSel = container.querySelector(
+        '#id_{name}_selected'
+    );
+    var hiddenInput = container.querySelector(
+        'input[type="hidden"][name="{name}"]'
+    );
+
+    function updateHidden() {{
+        var selected = [];
+        selectedSel.querySelectorAll('option').forEach(
+            function(opt) {{
+                selected.push(opt.value);
+            }}
+        );
+        hiddenInput.value = JSON.stringify(selected);
+    }}
+
+    container.querySelector('.disk-select-add')
+        .addEventListener('click', function() {{
+        Array.from(availSel.selectedOptions).forEach(
+            function(opt) {{
+            selectedSel.appendChild(opt);
+        }});
+        updateHidden();
+    }});
+
+    container.querySelector('.disk-select-remove')
+        .addEventListener('click', function() {{
+        Array.from(selectedSel.selectedOptions).forEach(
+            function(opt) {{
+            availSel.appendChild(opt);
+        }});
+        updateHidden();
+    }});
+}})();
+</script>'''
+
+        if not all_disks:
+            html = (
+                '<p style="color:#999;">请先选择关联主机并保存，'
+                '系统将自动读取磁盘信息</p>'
+            )
+
+        return html
+
+    def value_from_datadict(self, data, files, name):
+        hidden_value = data.get(name, '[]')
+        try:
+            return json.loads(hidden_value)
+        except json.JSONDecodeError:
+            return []
+
+
+class ProductAdminForm(forms.ModelForm):
+    """
+    产品管理表单
+
+    自定义磁盘配额和磁盘选择Widget
+    """
+
+    class Meta:
+        model = Product
+        fields = '__all__'
+        widgets = {
+            'default_disk_quota': DiskQuotaWidget(),
+            'allow_extra_quota_disks': DiskSelectionWidget(),
+        }
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+
+        disks = self._get_disks_from_instance()
+        self.fields['default_disk_quota'].widget.attrs['disks'] = disks
+        self.fields['allow_extra_quota_disks'].widget.attrs['disks'] = disks
+
+        if not self.instance or not self.instance.pk:
+            if not self.instance:
+                self.instance = Product()
+            if not self.instance.enable_disk_quota:
+                self.fields['default_disk_quota'].widget.attrs[
+                    'disabled'
+                ] = True
+                self.fields['allow_extra_quota_disks'].widget.attrs[
+                    'disabled'
+                ] = True
+
+    def _get_disks_from_instance(self):
+        if self.instance and self.instance.pk and self.instance.host:
+            try:
+                from utils.disk_quota import get_disk_info_via_client
+                client = self.instance.host.get_connection_client()
+                disks = get_disk_info_via_client(client)
+                return [d['drive'] for d in disks if d.get('drive')]
+            except Exception:
+                pass
+
+        if self.instance and self.instance.default_disk_quota:
+            return list(self.instance.default_disk_quota.keys())
+
+        return []
+
+    def clean_default_disk_quota(self):
+        data = self.cleaned_data.get('default_disk_quota', {})
+        if not data:
+            return {}
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                raise forms.ValidationError('磁盘配额格式无效')
+        if not isinstance(data, dict):
+            raise forms.ValidationError('磁盘配额必须为字典格式')
+        for disk, value in data.items():
+            try:
+                val = int(value)
+                if val < 0:
+                    raise forms.ValidationError(
+                        f'磁盘 {disk} 的配额不能为负数'
+                    )
+            except (ValueError, TypeError):
+                raise forms.ValidationError(
+                    f'磁盘 {disk} 的配额必须为数字'
+                )
+        return data
+
+    def clean_allow_extra_quota_disks(self):
+        data = self.cleaned_data.get('allow_extra_quota_disks', [])
+        if not data:
+            return []
+        if isinstance(data, str):
+            try:
+                data = json.loads(data)
+            except json.JSONDecodeError:
+                raise forms.ValidationError('磁盘选择格式无效')
+        if not isinstance(data, list):
+            raise forms.ValidationError('磁盘选择必须为列表格式')
+        return data
 
 
 @admin.register(SystemTask)
@@ -146,22 +489,31 @@ class ProductAdmin(ProviderDataIsolationMixin, admin.ModelAdmin):
     提供商只能管理自己创建的产品
     """
 
+    form = ProductAdminForm
+
     list_display = [
         "display_name",
         "host",
         "status",
         "is_available",
+        "enable_disk_quota",
         "created_at",
         "created_by",
     ]
-    list_filter = ["is_available", "host", "host__status", "created_at"]
+    list_filter = [
+        "is_available", "host", "host__status",
+        "enable_disk_quota", "created_at",
+    ]
     search_fields = ["name", "display_name", "host__name"]
     readonly_fields = ["created_at", "updated_at", "created_by"]
 
     fieldsets = (
         ("基本信息", {"fields": ("display_name", "display_description")}),
         ("产品组", {"fields": ("product_group",)}),
-        ("主机关联", {"fields": ("host", "is_available", "auto_approval")}),
+        (
+            "主机关联",
+            {"fields": ("host", "is_available", "auto_approval")},
+        ),
         (
             "显示配置",
             {
@@ -169,6 +521,17 @@ class ProductAdmin(ProviderDataIsolationMixin, admin.ModelAdmin):
                     "display_hostname",
                     "rdp_port",
                 )
+            },
+        ),
+        (
+            "磁盘配额管理",
+            {
+                "fields": (
+                    "enable_disk_quota",
+                    "default_disk_quota",
+                    "allow_extra_quota_disks",
+                ),
+                "classes": ("collapse",),
             },
         ),
         ("创建信息", {"fields": ("created_by",), "classes": ("collapse",)}),
@@ -302,6 +665,14 @@ class AccountOpeningRequestAdmin(ProviderDataIsolationMixin, admin.ModelAdmin):
             {"fields": ("username", "user_fullname", "user_email", "user_description")},
         ),
         ("目标产品", {"fields": ("target_product",)}),
+        (
+            "磁盘容量需求",
+            {
+                "fields": ("requested_disk_capacity",),
+                "classes": ("collapse",),
+                "description": "用户额外申请的磁盘容量（MB）",
+            },
+        ),
         (
             "审核信息",
             {"fields": ("status", "approved_by", "approval_date", "approval_notes")},
@@ -510,6 +881,14 @@ class CloudComputerUserAdmin(ProviderDataIsolationMixin, admin.ModelAdmin):
         ("用户信息", {"fields": ("username", "fullname", "email", "description")}),
         ("产品关联", {"fields": ("product",)}),
         ("状态权限", {"fields": ("status", "is_admin", "groups")}),
+        (
+            "磁盘配额",
+            {
+                "fields": ("disk_quota",),
+                "classes": ("collapse",),
+                "description": "配置用户的磁盘配额（MB），如 {\"C:\": 10240, \"D:\": 20480}",
+            },
+        ),
         ("创建信息", {"fields": ("created_from_request",), "classes": ("collapse",)}),
         (
             "时间信息",
@@ -550,7 +929,7 @@ class CloudComputerUserAdmin(ProviderDataIsolationMixin, admin.ModelAdmin):
 
     def save_model(self, request, obj, form, change):
         """
-        重写save_model方法，在保存时处理管理员权限变更
+        重写save_model方法，在保存时处理管理员权限变更和磁盘配额变更
         """
         if change and "is_admin" in form.changed_data:
             old_obj = CloudComputerUser.objects.get(pk=obj.pk)
@@ -573,6 +952,34 @@ class CloudComputerUserAdmin(ProviderDataIsolationMixin, admin.ModelAdmin):
                     self.message_user(
                         request,
                         f"{action}用户 {obj.username} 的管理员权限失败: {str(e)}",
+                        level="error",
+                    )
+        elif change and "disk_quota" in form.changed_data:
+            super().save_model(request, obj, form, change)
+            if obj.disk_quota and obj.product.enable_disk_quota:
+                try:
+                    from utils.disk_quota import set_user_disk_quotas
+                    host = obj.product.host
+                    client = host.get_connection_client()
+                    result = set_user_disk_quotas(
+                        client, obj.username, obj.disk_quota
+                    )
+                    if result["success"]:
+                        self.message_user(
+                            request,
+                            f"成功设置用户 {obj.username} 的磁盘配额"
+                        )
+                    else:
+                        errors = "; ".join(result.get("errors", []))
+                        self.message_user(
+                            request,
+                            f"设置磁盘配额部分失败: {errors}",
+                            level="warning",
+                        )
+                except Exception as e:
+                    self.message_user(
+                        request,
+                        f"设置用户 {obj.username} 磁盘配额失败: {str(e)}",
                         level="error",
                     )
         else:

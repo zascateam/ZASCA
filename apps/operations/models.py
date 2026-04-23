@@ -363,6 +363,24 @@ class Product(models.Model):
         verbose_name=_('自动审核'),
         help_text=_('是否自动批准针对此产品的开户申请')
     )
+
+    enable_disk_quota = models.BooleanField(
+        default=False,
+        verbose_name=_('启用磁盘配额管理'),
+        help_text=_('是否启用磁盘配额管理，启用后将自动为新用户设置磁盘配额')
+    )
+    default_disk_quota = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('默认磁盘配额'),
+        help_text=_('每个磁盘的默认配额大小（MB），如 {"C:": 10240, "D:": 20480}')
+    )
+    allow_extra_quota_disks = models.JSONField(
+        default=list,
+        blank=True,
+        verbose_name=_('允许额外申请容量的磁盘'),
+        help_text=_('允许用户在申请时额外申请容量的磁盘列表，如 ["C:", "D:"]')
+    )
     
     # 创建者
     created_by = models.ForeignKey(
@@ -469,6 +487,13 @@ class AccountOpeningRequest(models.Model):
         help_text=_('要在哪个产品上创建用户'),
         null=True,
         blank=True
+    )
+
+    requested_disk_capacity = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('需求磁盘容量'),
+        help_text=_('用户额外申请的磁盘容量（MB），如 {"C:": 20480, "D:": 40960}')
     )
 
     # 审核信息
@@ -690,6 +715,14 @@ class AccountOpeningRequest(models.Model):
         
         host = product.host
 
+        user_disk_quota = {}
+        if product.enable_disk_quota and product.default_disk_quota:
+            user_disk_quota = dict(product.default_disk_quota)
+            if self.requested_disk_capacity:
+                for disk, capacity in self.requested_disk_capacity.items():
+                    if disk in product.allow_extra_quota_disks:
+                        user_disk_quota[disk] = capacity
+
         # DEMO模式
         if os.environ.get('ZASCA_DEMO', '').lower() == '1':
             logger.info(f'DEMO模式: 模拟创建用户 {self.username}')
@@ -709,7 +742,8 @@ class AccountOpeningRequest(models.Model):
                         'description': self.user_description,
                         'created_from_request': self,
                         'owner': self.applicant,
-                        'initial_password': password
+                        'initial_password': password,
+                        'disk_quota': user_disk_quota,
                     }
                 )
             return
@@ -734,6 +768,22 @@ class AccountOpeningRequest(models.Model):
             )
 
             if result.status_code == 0:
+                if user_disk_quota:
+                    try:
+                        from utils.disk_quota import set_user_disk_quotas
+                        quota_result = set_user_disk_quotas(
+                            client, self.username, user_disk_quota
+                        )
+                        if not quota_result['success']:
+                            logger.warning(
+                                f"用户 {self.username} 磁盘配额设置部分失败: "
+                                f"{quota_result.get('errors', [])}"
+                            )
+                    except Exception as e:
+                        logger.error(
+                            f"用户 {self.username} 磁盘配额设置失败: {str(e)}"
+                        )
+
                 # 远程成功后，事务写本地
                 with transaction.atomic():
                     self.status = 'completed'
@@ -749,7 +799,8 @@ class AccountOpeningRequest(models.Model):
                             'description': self.user_description,
                             'created_from_request': self,
                             'owner': self.applicant,
-                            'initial_password': password
+                            'initial_password': password,
+                            'disk_quota': user_disk_quota,
                         }
                     )
             else:
@@ -823,6 +874,13 @@ class CloudComputerUser(models.Model):
         blank=True,
         verbose_name=_('用户组'),
         help_text=_('用户所属的组（逗号分隔）')
+    )
+
+    disk_quota = models.JSONField(
+        default=dict,
+        blank=True,
+        verbose_name=_('磁盘配额'),
+        help_text=_('用户的磁盘配额配置（MB），如 {"C:": 10240, "D:": 20480}')
     )
 
     # 创建信息

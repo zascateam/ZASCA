@@ -156,6 +156,7 @@ class AccountOpeningRequestCreateView(CreateView):
             'user_description': form.cleaned_data['user_description'],
             'target_product_id': form.cleaned_data['target_product'].id,
             'target_product_name': form.cleaned_data['target_product'].display_name,
+            'requested_disk_capacity': form.cleaned_data.get('requested_disk_capacity', {}),
         }
         self.request.session['confirm_data'] = confirm_data
         
@@ -204,6 +205,7 @@ def account_opening_submit(request):
     account_request.user_fullname = confirm_data['user_fullname']
     account_request.user_email = request.user.email  # 使用当前用户的邮箱
     account_request.user_description = confirm_data['user_description']
+    account_request.requested_disk_capacity = confirm_data.get('requested_disk_capacity', {})
     # 移除了requested_password字段，由系统自动生成
     
     # 设置目标产品
@@ -324,33 +326,37 @@ class CloudComputerUserListView(ListView):
         """获取查询集"""
         queryset = CloudComputerUser.objects.all()
 
-        # 应用过滤条件
         form = CloudComputerUserFilterForm(self.request.GET)
         if form.is_valid():
             status = form.cleaned_data.get('status')
             if status:
                 queryset = queryset.filter(status=status)
 
-            host = form.cleaned_data.get('host')
-            if host:
-                queryset = queryset.filter(host=host)
+            product = form.cleaned_data.get('product')
+            if product:
+                queryset = queryset.filter(product=product)
 
             search = form.cleaned_data.get('search')
             if search:
-                queryset = queryset.filter(
-                    Q(username__icontains=search) |
-                    Q(fullname__icontains=search) |
-                    Q(email__icontains=search)
-                )
+                import re
+                cleaned_search = re.sub(r'[;"\\\\]+', '', search)[:50]
+                if cleaned_search:
+                    queryset = queryset.filter(
+                        Q(username__icontains=cleaned_search) |
+                        Q(fullname__icontains=cleaned_search) |
+                        Q(email__icontains=cleaned_search)
+                    )
 
-        return queryset.select_related('host', 'created_from_request__applicant').order_by('-created_at')
+        return queryset.select_related(
+            'product', 'created_from_request__applicant'
+        ).order_by('-created_at')
 
     def get_context_data(self, **kwargs):
         """获取模板上下文数据"""
         context = super().get_context_data(**kwargs)
         context['filter_form'] = CloudComputerUserFilterForm(self.request.GET)
         context['statuses'] = CloudComputerUser._meta.get_field('status').choices
-        context['hosts'] = Host.objects.all()
+        context['products'] = Product.objects.all()
         return context
 
 
@@ -453,5 +459,45 @@ def get_password_and_burn(request, pk):
     try:
         password = cloud_user.get_and_burn_password()
         return JsonResponse({'success': True, 'password': password})
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+def get_product_disk_config(request, product_id):
+    """获取产品的磁盘配额配置"""
+    try:
+        product = Product.objects.get(pk=product_id, is_available=True)
+    except Product.DoesNotExist:
+        return JsonResponse({'success': False, 'error': '产品不存在'}, status=404)
+
+    return JsonResponse({
+        'success': True,
+        'data': {
+            'enable_disk_quota': product.enable_disk_quota,
+            'default_disk_quota': product.default_disk_quota,
+            'allow_extra_quota_disks': product.allow_extra_quota_disks,
+        }
+    })
+
+
+@login_required
+def get_host_disk_info(request, host_id):
+    """获取主机的磁盘信息"""
+    from utils.disk_quota import get_disk_info_via_client
+
+    try:
+        host = Host.objects.get(pk=host_id)
+    except Host.DoesNotExist:
+        return JsonResponse({'success': False, 'error': '主机不存在'}, status=404)
+
+    if not request.user.is_superuser and not request.user.is_staff:
+        if not host.administrators.filter(pk=request.user.pk).exists() and not host.providers.filter(pk=request.user.pk).exists():
+            return JsonResponse({'success': False, 'error': '无权访问'}, status=403)
+
+    try:
+        client = host.get_connection_client()
+        disks = get_disk_info_via_client(client)
+        return JsonResponse({'success': True, 'data': disks})
     except Exception as e:
         return JsonResponse({'success': False, 'error': str(e)})
