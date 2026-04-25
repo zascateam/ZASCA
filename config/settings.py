@@ -226,6 +226,10 @@ SECURE_CONTENT_TYPE_NOSNIFF = True
 X_FRAME_OPTIONS = 'DENY'
 SECURE_REFERRER_POLICY = 'strict-origin-when-cross-origin'
 
+USE_X_FORWARDED_FOR = os.environ.get(
+    'USE_X_FORWARDED_FOR', 'False'
+).lower() == 'true'
+
 SESSION_COOKIE_SECURE = os.environ.get(
     'SESSION_COOKIE_SECURE', 'True' if not DEBUG else 'False'
 ).lower() == 'true'

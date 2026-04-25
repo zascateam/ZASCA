@@ -384,9 +384,27 @@ class SystemConfig(models.Model):
 
     @classmethod
     def get_config(cls):
-        """获取当前系统配置"""
+        """获取当前系统配置（带缓存）"""
+        from django.core.cache import cache
+        cache_key = 'system_config:singleton'
+        config = cache.get(cache_key)
+        if config is not None:
+            return config
         config, created = cls.objects.get_or_create(pk=1)
+        cache.set(cache_key, config, timeout=300)
         return config
+
+    def save(self, *args, **kwargs):
+        from django.core.cache import cache
+        result = super().save(*args, **kwargs)
+        cache.delete('system_config:singleton')
+        return result
+
+    def delete(self, *args, **kwargs):
+        from django.core.cache import cache
+        result = super().delete(*args, **kwargs)
+        cache.delete('system_config:singleton')
+        return result
 
     def get_captcha_config(self, scene=None):
         """

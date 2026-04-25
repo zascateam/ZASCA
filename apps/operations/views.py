@@ -42,11 +42,7 @@ class SystemTaskListView(ListView):
             end_date = form.cleaned_data.get('end_date')
 
             if task_type:
-                # 对搜索输入进行清理，防止潜在的安全问题
-                import re
-                cleaned_task_type = re.sub(r'[;"\\\\]+', '', task_type)[:50]  # 移除潜在危险字符，限制长度
-                if cleaned_task_type:  # 确保清理后的搜索词非空
-                    queryset = queryset.filter(task_type__icontains=cleaned_task_type)
+                queryset = queryset.filter(task_type__icontains=task_type[:50])
             if status:
                 queryset = queryset.filter(status=status)
             if start_date:
@@ -106,6 +102,7 @@ def task_progress(request, task_id):
         })
 
 
+@method_decorator(login_required, name='dispatch')
 class AccountOpeningRequestCreateView(CreateView):
     """创建开户申请视图"""
     
@@ -268,15 +265,11 @@ class AccountOpeningRequestListView(ListView):
 
             search = form.cleaned_data.get('search')
             if search:
-                # 对搜索输入进行清理，防止潜在的安全问题
-                import re
-                cleaned_search = re.sub(r'[;"\\\\]+', '', search)[:50]  # 移除潜在危险字符，限制长度
-                if cleaned_search:  # 确保清理后的搜索词非空
-                    queryset = queryset.filter(
-                        Q(username__icontains=cleaned_search) |
-                        Q(user_fullname__icontains=cleaned_search) |
-                        Q(contact_email__icontains=cleaned_search)
-                    )
+                queryset = queryset.filter(
+                    Q(username__icontains=search[:50]) |
+                    Q(user_fullname__icontains=search[:50]) |
+                    Q(contact_email__icontains=search[:50])
+                )
 
         return queryset.select_related('applicant', 'target_product', 'target_product__host', 'approved_by').order_by('-created_at')
 
@@ -338,14 +331,11 @@ class CloudComputerUserListView(ListView):
 
             search = form.cleaned_data.get('search')
             if search:
-                import re
-                cleaned_search = re.sub(r'[;"\\\\]+', '', search)[:50]
-                if cleaned_search:
-                    queryset = queryset.filter(
-                        Q(username__icontains=cleaned_search) |
-                        Q(fullname__icontains=cleaned_search) |
-                        Q(email__icontains=cleaned_search)
-                    )
+                queryset = queryset.filter(
+                    Q(username__icontains=search[:50]) |
+                    Q(fullname__icontains=search[:50]) |
+                    Q(email__icontains=search[:50])
+                )
 
         return queryset.select_related(
             'product', 'created_from_request__applicant'
@@ -460,7 +450,8 @@ def get_password_and_burn(request, pk):
         password = cloud_user.get_and_burn_password()
         return JsonResponse({'success': True, 'password': password})
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.error(f"Error burning password: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': 'Failed to retrieve password'})
 
 
 @login_required
@@ -500,4 +491,5 @@ def get_host_disk_info(request, host_id):
         disks = get_disk_info_via_client(client)
         return JsonResponse({'success': True, 'data': disks})
     except Exception as e:
-        return JsonResponse({'success': False, 'error': str(e)})
+        logger.error(f"Error getting disk info: {str(e)}", exc_info=True)
+        return JsonResponse({'success': False, 'error': 'Failed to get disk info'})

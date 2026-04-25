@@ -113,12 +113,13 @@ class SessionValidationMiddleware:
     
     def get_client_ip(self, request):
         """获取客户端真实IP地址"""
-        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-        if x_forwarded_for:
-            # X-Forwarded-For可能包含多个IP，取第一个
-            ip = x_forwarded_for.split(',')[0].strip()
-            logger.debug(f"Got IP from X-Forwarded-For: {ip}")
-        else:
-            ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
-            logger.debug(f"Got IP from REMOTE_ADDR: {ip}")
+        from django.conf import settings
+        if getattr(settings, 'USE_X_FORWARDED_FOR', False):
+            x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+            if x_forwarded_for:
+                ip = x_forwarded_for.split(',')[0].strip()
+                logger.debug(f"Got IP from X-Forwarded-For: {ip}")
+                return ip
+        ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
+        logger.debug(f"Got IP from REMOTE_ADDR: {ip}")
         return ip

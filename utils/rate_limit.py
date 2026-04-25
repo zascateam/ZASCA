@@ -80,11 +80,11 @@ def api_rate_limit():
 
 def get_client_ip(request) -> str:
     """获取客户端 IP 地址"""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        ip = x_forwarded_for.split(',')[0].strip()
-    else:
-        ip = request.META.get('REMOTE_ADDR')
+    if getattr(settings, 'USE_X_FORWARDED_FOR', False):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+    ip = request.META.get('REMOTE_ADDR')
     return ip or 'unknown'
 
 

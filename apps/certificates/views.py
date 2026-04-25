@@ -15,7 +15,6 @@ from django.core.exceptions import ValidationError
 logger = logging.getLogger(__name__)
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 @login_required
 @permission_required('certificates.add_servercertificate', raise_exception=True)
@@ -87,7 +86,6 @@ def issue_server_certificate(request):
         }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 @login_required
 @permission_required('certificates.add_clientcertificate', raise_exception=True)
@@ -167,6 +165,7 @@ def issue_client_certificate(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@login_required
 def validate_certificate_request(request):
     try:
         data = json.loads(request.body.decode('utf-8'))
@@ -213,7 +212,6 @@ def validate_certificate_request(request):
         }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["GET"])
 @login_required
 def get_ca_certificate(request):
@@ -350,7 +348,6 @@ class CertificateManagementView(View):
             }, status=500)
 
 
-@csrf_exempt
 @require_http_methods(["POST"])
 @login_required
 @permission_required('certificates.change_servercertificate', raise_exception=True)

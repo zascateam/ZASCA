@@ -17,6 +17,8 @@ logger = logging.getLogger(__name__)
 
 
 @require_http_methods(["GET"])
+@login_required
+@permission_required('audit.view_auditlog', raise_exception=True)
 def get_audit_logs(request):
     """获取审计日志列表"""
     try:
@@ -106,11 +108,13 @@ def get_audit_logs(request):
         logger.error(f"Error getting audit logs: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to retrieve audit logs'
         }, status=500)
 
 
 @require_http_methods(["GET"])
+@login_required
+@permission_required('audit.view_sensitiveoperation', raise_exception=True)
 def get_sensitive_operations(request):
     """获取敏感操作记录"""
     try:
@@ -180,11 +184,13 @@ def get_sensitive_operations(request):
         logger.error(f"Error getting sensitive operations: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to retrieve sensitive operations'
         }, status=500)
 
 
 @require_http_methods(["GET"])
+@login_required
+@permission_required('audit.view_securityevent', raise_exception=True)
 def get_security_events(request):
     """获取安全事件记录"""
     try:
@@ -261,11 +267,12 @@ def get_security_events(request):
         logger.error(f"Error getting security events: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to retrieve security events'
         }, status=500)
 
 
 @login_required
+@permission_required('audit.change_securityevent', raise_exception=True)
 @require_http_methods(["POST"])
 def mark_security_event_resolved(request):
     """标记安全事件为已解决"""
@@ -302,11 +309,13 @@ def mark_security_event_resolved(request):
         logger.error(f"Error marking security event as resolved: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to resolve security event'
         }, status=500)
 
 
 @require_http_methods(["GET"])
+@login_required
+@permission_required('audit.view_sessionactivity', raise_exception=True)
 def get_user_session_activity(request):
     """获取用户会话活动记录"""
     try:
@@ -333,7 +342,7 @@ def get_user_session_activity(request):
                         'id': session.id,
                         'user': session.user.username,
                         'user_id': session.user.id,
-                        'session_key': session.session_key,
+                        'session_key': session.session_key[:8] + '...',
                         'ip_address': session.ip_address,
                         'user_agent': session.user_agent[:100],  # 限制长度
                         'login_time': session.login_time.isoformat(),
@@ -364,7 +373,7 @@ def get_user_session_activity(request):
         logger.error(f"Error getting user session activity: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to retrieve session activity'
         }, status=500)
 
 
@@ -411,7 +420,7 @@ class AuditManagementView(View):
             logger.error(f"Error getting audit statistics: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
-                'error': str(e)
+                'error': 'Failed to retrieve audit statistics'
             }, status=500)
     
     @method_decorator(permission_required('audit.delete_auditlog'))
@@ -454,11 +463,13 @@ class AuditManagementView(View):
             logger.error(f"Error cleaning audit logs: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
-                'error': str(e)
+                'error': 'Failed to clean audit logs'
             }, status=500)
 
 
 @require_http_methods(["GET"])
+@login_required
+@permission_required('audit.view_auditlog', raise_exception=True)
 def export_audit_logs(request):
     """导出审计日志（CSV格式）"""
     try:
@@ -529,5 +540,5 @@ def export_audit_logs(request):
         logger.error(f"Error exporting audit logs: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to export audit logs'
         }, status=500)

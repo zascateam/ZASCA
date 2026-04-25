@@ -1,7 +1,7 @@
 from django.http import JsonResponse
 from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
-from django.contrib.auth.decorators import permission_required
+from django.contrib.auth.decorators import login_required, permission_required
 from django.utils.decorators import method_decorator
 from django.views import View
 from .models import InitialToken, ActiveSession
@@ -22,27 +22,28 @@ logger = logging.getLogger(__name__)
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@login_required
+@permission_required('bootstrap.add_initialtoken', raise_exception=True)
 def create_initial_token(request):
     """创建初始令牌API - 基于配对码的简化认证机制"""
     try:
         data = json.loads(request.body.decode('utf-8'))
         host_id = data.get('host_id')
-        operator_id = data.get('operator_id')  # 创建者ID
-        expire_hours = data.get('expire_hours', 24)  # 默认24小时过期
-        
+        operator_id = data.get('operator_id')
+        expire_hours = data.get('expire_hours', 24)
+
         if not host_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Host ID is required'
             }, status=400)
-        
+
         if not operator_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Operator ID is required'
             }, status=400)
-        
-        # 验证主机存在
+
         try:
             host = Host.objects.get(id=host_id)
         except Host.DoesNotExist:
@@ -50,25 +51,22 @@ def create_initial_token(request):
                 'success': False,
                 'error': 'Host not found'
             }, status=404)
-        
-        # 创建初始令牌
+
         from datetime import timedelta
         from django.utils import timezone
-        
-        token = secrets.token_urlsafe(32)  # 生成安全的随机令牌
+
+        token = secrets.token_urlsafe(32)
         expires_at = timezone.now() + timedelta(hours=expire_hours)
-        
+
         initial_token = InitialToken.objects.create(
             token=token,
             host=host,
             expires_at=expires_at,
             status='ISSUED'
         )
-        
-        # 生成配对码
+
         pairing_code = initial_token.generate_pairing_code()
-        
-        # 准备返回给H端的Base64编码数据
+
         import base64
         config_data = {
             'c_side_url': request.build_absolute_uri('/').rstrip('/'),
@@ -76,10 +74,10 @@ def create_initial_token(request):
             'host_id': str(host.id),
             'expires_at': initial_token.expires_at.isoformat()
         }
-        
+
         config_json = json.dumps(config_data)
         encoded_config = base64.b64encode(config_json.encode('utf-8')).decode('utf-8')
-        
+
         return JsonResponse({
             'success': True,
             'data': {
@@ -87,11 +85,11 @@ def create_initial_token(request):
                 'expires_at': initial_token.expires_at.isoformat(),
                 'host_id': host.id,
                 'hostname': host.hostname,
-                'pairing_code': pairing_code,  # 返回配对码给管理员
-                'encoded_config': encoded_config  # 返回Base64编码的配置给H端
+                'pairing_code': pairing_code,
+                'encoded_config': encoded_config
             }
         })
-        
+
     except json.JSONDecodeError:
         return JsonResponse({
             'success': False,
@@ -101,7 +99,7 @@ def create_initial_token(request):
         logger.error(f"Error creating initial token: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to create initial token'
         }, status=500)
 
 
@@ -159,10 +157,10 @@ def verify_pairing_code(request):
                 
         except Exception as e:
             logger.error(f"Error verifying pairing code: {str(e)}", exc_info=True)
-            return JsonResponse({
-                'success': False,
-                'error': str(e)
-            }, status=500)
+        return JsonResponse({
+            'success': False,
+            'error': 'Pairing code verification failed'
+        }, status=500)
         
     except json.JSONDecodeError:
         return JsonResponse({
@@ -173,7 +171,7 @@ def verify_pairing_code(request):
         logger.error(f"Error validating pairing code: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Pairing code validation failed'
         }, status=500)
 
 
@@ -263,32 +261,33 @@ def get_bootstrap_config(request):
         logger.error(f"Error getting bootstrap config: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to get bootstrap config'
         }, status=500)
 
 
 @csrf_exempt
 @require_http_methods(["POST"])
+@login_required
+@permission_required('bootstrap.change_initialtoken', raise_exception=True)
 def trigger_host_bootstrap(request):
     """触发主机引导流程API"""
     try:
         data = json.loads(request.body.decode('utf-8'))
         host_id = data.get('host_id')
-        operator_id = data.get('operator_id')  # 操作员ID
-        
+        operator_id = data.get('operator_id')
+
         if not host_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Host ID is required'
             }, status=400)
-        
+
         if not operator_id:
             return JsonResponse({
                 'success': False,
                 'error': 'Operator ID is required'
             }, status=400)
-        
-        # 验证主机存在
+
         try:
             host = Host.objects.get(id=host_id)
         except Host.DoesNotExist:
@@ -296,13 +295,12 @@ def trigger_host_bootstrap(request):
                 'success': False,
                 'error': 'Host not found'
             }, status=404)
-        
-        # 启动引导任务
+
         task_result = initialize_host_bootstrap.delay(
             host_id=host_id,
             operator_id=operator_id
         )
-        
+
         return JsonResponse({
             'success': True,
             'data': {
@@ -312,7 +310,7 @@ def trigger_host_bootstrap(request):
                 'status': 'started'
             }
         })
-        
+
     except json.JSONDecodeError:
         return JsonResponse({
             'success': False,
@@ -322,7 +320,7 @@ def trigger_host_bootstrap(request):
         logger.error(f"Error triggering host bootstrap: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to trigger host bootstrap'
         }, status=500)
 
 
@@ -377,7 +375,7 @@ def check_bootstrap_status(request):
         logger.error(f"Error checking bootstrap status: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to check bootstrap status'
         }, status=500)
 
 
@@ -427,7 +425,7 @@ def validate_bootstrap_token(request):
         logger.error(f"Error validating bootstrap token: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Token validation failed'
         }, status=500)
 
 
@@ -500,7 +498,7 @@ def get_session_token(request):
         logger.error(f"Error creating session token: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to create session token'
         }, status=500)
 
 
@@ -563,7 +561,7 @@ def exchange_token(request):
         logger.error(f"Error exchanging token: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Token exchange failed'
         }, status=500)
 
 
@@ -624,7 +622,7 @@ def check_pairing_status(request):
         logger.error(f"Error checking pairing status: {str(e)}", exc_info=True)
         return JsonResponse({
             'paired': False,
-            'message': f'Internal error: {str(e)}'
+            'message': 'Internal error'
         }, status=500)
 
 
@@ -661,19 +659,18 @@ def revoke_session(request):
         logger.error(f"Error revoking session: {str(e)}", exc_info=True)
         return JsonResponse({
             'success': False,
-            'error': str(e)
+            'error': 'Failed to revoke session'
         }, status=500)
 
 
 def get_client_ip(request):
     """获取客户端真实IP地址"""
-    x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
-    if x_forwarded_for:
-        # X-Forwarded-For可能包含多个IP，取第一个
-        ip = x_forwarded_for.split(',')[0].strip()
-    else:
-        ip = request.META.get('REMOTE_ADDR', '127.0.0.1')
-    return ip
+    from django.conf import settings as django_settings
+    if getattr(django_settings, 'USE_X_FORWARDED_FOR', False):
+        x_forwarded_for = request.META.get('HTTP_X_FORWARDED_FOR')
+        if x_forwarded_for:
+            return x_forwarded_for.split(',')[0].strip()
+    return request.META.get('REMOTE_ADDR', '127.0.0.1')
 
 
 class BootstrapManagementView(View):
@@ -745,7 +742,7 @@ class BootstrapManagementView(View):
             logger.error(f"Error getting bootstrap tokens: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
-                'error': str(e)
+                'error': 'Failed to retrieve bootstrap tokens'
             }, status=500)
     
     @method_decorator(permission_required('bootstrap.delete_initialtoken'))
@@ -772,5 +769,5 @@ class BootstrapManagementView(View):
             logger.error(f"Error deleting initial token: {str(e)}", exc_info=True)
             return JsonResponse({
                 'success': False,
-                'error': str(e)
+                'error': 'Failed to delete initial token'
             }, status=500)

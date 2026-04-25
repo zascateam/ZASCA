@@ -3,6 +3,9 @@ from django.utils.html import format_html
 from django.urls import reverse
 from django.utils.safestring import mark_safe
 from .models import InitialToken, ActiveSession
+import logging
+
+logger = logging.getLogger(__name__)
 from apps.hosts.models import Host
 from django.contrib.auth import get_user_model
 from django.utils import timezone
@@ -209,7 +212,8 @@ class InitialTokenAdmin(admin.ModelAdmin):
         except Host.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Host not found'}, status=404)
         except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)}, status=500)
+            logger.error(f"Error in admin bootstrap action: {str(e)}", exc_info=True)
+            return JsonResponse({'success': False, 'error': 'Operation failed'}, status=500)
 
     def refresh_pairing_code(self, request, object_id):
         """刷新配对码"""
@@ -232,7 +236,8 @@ class InitialTokenAdmin(admin.ModelAdmin):
         except InitialToken.DoesNotExist:
             return JsonResponse({'success': False, 'error': 'Token not found'}, status=404)
         except Exception as e:
-            return JsonResponse({'success': False, 'error': str(e)}, status=500)
+            logger.error(f"Error refreshing pairing code: {str(e)}", exc_info=True)
+            return JsonResponse({'success': False, 'error': 'Operation failed'}, status=500)
 
     class Media:
         js = ('admin/js/bootstrap_admin.js',)

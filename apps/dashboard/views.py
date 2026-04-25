@@ -95,27 +95,36 @@ class DashboardView(LoginRequiredMixin, TemplateView):
         context["group_filter"] = group_filter
         context["auto_approval_filter"] = auto_approval_filter
 
-        context["account_requests_pending"] = AccountOpeningRequest.objects.filter(
-            status="pending"
-        ).count()
+        from django.db.models import Count, Q
+        stats = AccountOpeningRequest.objects.aggregate(
+            pending_count=Count("id", filter=Q(status="pending")),
+        )
+        context["account_requests_pending"] = stats["pending_count"]
         context["cloud_users_total"] = CloudComputerUser.objects.count()
 
         if self.request.user.is_staff or self.request.user.is_superuser:
             context["account_requests_recent"] = (
-                AccountOpeningRequest.objects.all().order_by("-created_at")[:5]
+                AccountOpeningRequest.objects.select_related(
+                    "applicant", "target_product", "target_product__host"
+                ).order_by("-created_at")[:5]
             )
         else:
             context["account_requests_recent"] = AccountOpeningRequest.objects.filter(
                 applicant=self.request.user
+            ).select_related(
+                "applicant", "target_product", "target_product__host"
             ).order_by("-created_at")[:5]
 
-        UserActivity.objects.create(
-            user=self.request.user,
-            activity_type="dashboard_view",
-            description="访问仪表盘",
-            ip_address=get_client_ip(self.request),
-            user_agent=self.request.META.get("HTTP_USER_AGENT", ""),
-        )
+        try:
+            UserActivity.objects.create(
+                user=self.request.user,
+                activity_type="dashboard_view",
+                description="访问仪表盘",
+                ip_address=get_client_ip(self.request),
+                user_agent=self.request.META.get("HTTP_USER_AGENT", ""),
+            )
+        except Exception:
+            pass
 
         return context
 
