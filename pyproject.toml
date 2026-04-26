@@ -48,6 +48,7 @@ dependencies = [
     "pyotp",
     "toml",
     "black>=26.3.1",
+    "pymysql>=1.1.2",
 ]
 
 [project.optional-dependencies]
